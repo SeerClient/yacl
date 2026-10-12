@@ -1,0 +1,39 @@
+{
+  "schemaVersion": 1,
+  "id": "yet_another_config_lib_v3",
+  "version": "3.9.4",
+  "name": "YetAnotherConfigLib",
+  "description": "YetAnotherConfigLib (yacl) is just that. A builder-based configuration library for Minecraft.",
+  "authors": [
+    "isXander"
+  ],
+  "contact": {
+    "homepage": "https://isxander.dev",
+    "issues": "https://github.com/isXander/YetAnotherConfigLib/issues",
+    "sources": "https://github.com/isXander/YetAnotherConfigLib"
+  },
+  "icon": "yacl-128x.png",
+  "license": "LGPL-3.0-or-later",
+  "environment": "*",
+  "depends": {
+    "fabricloader": ">=0.18.0",
+    "minecraft": "~26.2-beta.4",
+    "fabric-resource-loader-v1": "*"
+  },
+  "entrypoints": {
+    "client": [
+      "dev.isxander.yacl3.platform.PlatformEntrypoint"
+    ]
+  },
+  "custom": {
+    "modmenu": {
+      "badges": [
+        "library"
+      ]
+    }
+  },
+  "mixins": [
+    "yacl.mixins.json",
+    "yacl-fabric.mixins.json"
+  ]
+}

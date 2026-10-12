@@ -1,0 +1,540 @@
+package dev.isxander.yacl3.gui;
+
+import com.mojang.blaze3d.platform.InputConstants;
+import dev.isxander.yacl3.api.*;
+import dev.isxander.yacl3.api.utils.Dimension;
+import dev.isxander.yacl3.api.utils.MutableDimension;
+import dev.isxander.yacl3.api.utils.OptionUtils;
+import dev.isxander.yacl3.gui.controllers.PopupControllerScreen;
+import dev.isxander.yacl3.gui.controllers.ControllerPopupWidget;
+import dev.isxander.yacl3.gui.tab.ScrollableNavigationBar;
+import dev.isxander.yacl3.gui.tab.TabExt;
+import dev.isxander.yacl3.gui.utils.GuiUtils;
+import dev.isxander.yacl3.impl.utils.YACLConstants;
+import dev.isxander.yacl3.platform.YACLPlatform;
+import net.minecraft.ChatFormatting;
+import net.minecraft.client.gui.Font;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
+import net.minecraft.client.gui.components.AbstractWidget;
+import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.MultiLineLabel;
+import net.minecraft.client.gui.components.Tooltip;
+import net.minecraft.client.gui.components.events.GuiEventListener;
+import net.minecraft.client.gui.components.tabs.Tab;
+import net.minecraft.client.gui.components.tabs.TabManager;
+import net.minecraft.client.gui.navigation.ScreenRectangle;
+import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.client.gui.screens.inventory.tooltip.TooltipRenderUtil;
+import net.minecraft.client.gui.screens.worldselection.CreateWorldScreen;
+import net.minecraft.client.renderer.RenderPipelines;
+import net.minecraft.network.chat.CommonComponents;
+import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
+import net.minecraft.resources.Identifier;
+import org.jetbrains.annotations.Nullable;
+
+import java.util.HashSet;
+import java.util.Set;
+import java.util.function.Consumer;
+
+import net.minecraft.client.input.MouseButtonEvent;
+
+public class YACLScreen extends Screen {
+    public final YetAnotherConfigLib config;
+
+    private final Screen parent;
+
+    public final TabManager tabManager = new TabManager(this::addRenderableWidget, this::removeWidget);
+    public ScrollableNavigationBar tabNavigationBar;
+    public ScreenRectangle tabArea;
+
+    public Component saveButtonMessage;
+    public Tooltip saveButtonTooltipMessage;
+    private int saveButtonMessageTime;
+
+    private boolean pendingChanges;
+
+    public ControllerPopupWidget<?> currentPopupController = null;
+    public boolean popupControllerVisible = false;
+
+    /**
+     * The tab where the user started searching
+     */
+    private @Nullable CategoryTab preferredTab = null;
+
+    public YACLScreen(YetAnotherConfigLib config, Screen parent) {
+        super(config.title());
+        this.config = config;
+        this.parent = parent;
+
+        OptionUtils.forEachOptions(config, option -> {
+            option.addEventListener((opt, event) -> {
+                if (event != OptionEventListener.Event.INITIAL) onOptionChanged(opt);
+            });
+        });
+    }
+
+    @Override
+    protected void init() {
+        tabArea = new ScreenRectangle(0, 24 - 1, this.width, this.height - 24 + 1);
+
+        int currentTab = tabNavigationBar != null
+                ? tabNavigationBar.getTabs().indexOf(tabManager.getCurrentTab())
+                : 0;
+        if (currentTab == -1)
+            currentTab = 0;
+
+        tabNavigationBar = new ScrollableNavigationBar(this.width, tabManager, config.categories()
+                .stream()
+                .map(category -> {
+                    if (category instanceof CustomTabProvider tabProvider) {
+                        return tabProvider.createTab(this, tabArea);
+                    }
+                    if (category instanceof PlaceholderCategory placeholder)
+                        return new PlaceholderTab(placeholder, this);
+                    return new CategoryTab(this, category, tabArea);
+                }).toList());
+        tabNavigationBar.selectTab(currentTab, false);
+        
+        tabNavigationBar.arrangeElements(tabArea.width());
+        
+
+
+        tabManager.setTabArea(tabArea);
+        addRenderableWidget(tabNavigationBar);
+
+        config.initConsumer().accept(this);
+    }
+
+    public void addPopupControllerWidget(ControllerPopupWidget<?> controllerPopupWidget) {
+
+        //Safety check for the color picker
+        if (currentPopupController != null) {
+            clearPopupControllerWidget();
+        }
+
+        currentPopupController = controllerPopupWidget;
+        popupControllerVisible = true;
+
+        OptionListWidget optionListWidget = null;
+        if(this.tabNavigationBar.getTabManager().getCurrentTab() instanceof CategoryTab categoryTab) {
+            optionListWidget = categoryTab.optionList.getType();
+        }
+        if(optionListWidget != null) {
+            GuiUtils.setScreen(new PopupControllerScreen(this, controllerPopupWidget));
+        }
+    }
+
+    public void clearPopupControllerWidget() {
+        if (GuiUtils.getCurrentScreen() instanceof PopupControllerScreen popupControllerScreen) {
+            popupControllerScreen.onClose();
+        }
+        popupControllerVisible = false;
+        currentPopupController = null;
+    }
+
+    @Override
+    public void extractBackground(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick) {
+        super.extractBackground(guiGraphics, mouseX, mouseY, partialTick);
+
+        if (tabManager.getCurrentTab() instanceof TabExt tab) {
+            tab.renderBackground(guiGraphics);
+        }
+    }
+
+    public void finishOrSave() {
+        saveButtonMessage = null;
+
+        if (pendingChanges()) {
+            Set<OptionFlag> flags = new HashSet<>();
+            OptionUtils.forEachOptions(config, option -> {
+                if (option.applyValue()) {
+                    flags.addAll(option.flags());
+                }
+            });
+            OptionUtils.forEachOptions(config, option -> {
+                if (option.changed()) {
+                    // if still changed after applying, reset to the current value from binding
+                    // as something has gone wrong.
+                    option.forgetPendingValue();
+                    YACLConstants.LOGGER.error("Option '{}' value mismatch after applying! Reset to binding's getter.", option.name().getString());
+                }
+            });
+            config.saveFunction().run();
+
+            flags.forEach(flag -> flag.accept(minecraft));
+
+            pendingChanges = false;
+            if (tabManager.getCurrentTab() instanceof CategoryTab categoryTab) {
+                categoryTab.updateButtons();
+            }
+        } else onClose();
+    }
+
+    public void cancelOrReset() {
+        if (pendingChanges()) { // if pending changes, button acts as a cancel button
+            OptionUtils.forEachOptions(config, Option::forgetPendingValue);
+            onClose();
+        } else { // if not, button acts as a reset button
+            OptionUtils.forEachOptions(config, Option::requestSetDefault);
+        }
+    }
+
+    public void undo() {
+        OptionUtils.forEachOptions(config, Option::forgetPendingValue);
+    }
+
+    @Override
+    public void tick() {
+        if (tabManager.getCurrentTab() instanceof TabExt tabExt) {
+            tabExt.tick();
+        }
+
+        if (tabManager.getCurrentTab() instanceof CategoryTab categoryTab) {
+            if (saveButtonMessage != null) {
+                if (saveButtonMessageTime > 140) {
+                    saveButtonMessage = null;
+                    saveButtonTooltipMessage = null;
+                    saveButtonMessageTime = 0;
+                } else {
+                    saveButtonMessageTime++;
+                    categoryTab.saveFinishedButton.setMessage(saveButtonMessage);
+                    if (saveButtonTooltipMessage != null) {
+                        categoryTab.saveFinishedButton.setTooltip(saveButtonTooltipMessage);
+                    }
+                }
+            }
+        }
+    }
+
+    @Override
+    public boolean mouseClicked(MouseButtonEvent mouseButtonEvent, boolean bl) {
+        if (super.mouseClicked(mouseButtonEvent, bl)) {
+            this.setDragging(true);
+            return true;
+        }
+        return false;
+    }
+
+    @Override
+    public boolean mouseDragged(MouseButtonEvent mouseButtonEvent, double d, double e) {
+        return this.getFocused() != null
+                && this.isDragging()
+                && (mouseButtonEvent.button() == InputConstants.MOUSE_BUTTON_LEFT || mouseButtonEvent.button() == InputConstants.MOUSE_BUTTON_RIGHT)
+                && this.getFocused().mouseDragged(mouseButtonEvent, d, e);
+    }
+
+    public void setSaveButtonMessage(Component message, Component tooltip) {
+        saveButtonMessage = message;
+        saveButtonTooltipMessage = Tooltip.create(tooltip);
+        saveButtonMessageTime = 0;
+    }
+
+    public boolean pendingChanges() {
+        return pendingChanges;
+    }
+
+    private void onOptionChanged(Option<?> option) {
+        pendingChanges = false;
+
+        OptionUtils.consumeOptions(config, opt -> {
+            pendingChanges |= opt.changed();
+            return pendingChanges;
+        });
+
+        if (tabManager.getCurrentTab() instanceof CategoryTab categoryTab) {
+            categoryTab.updateButtons();
+        }
+    }
+
+    @Override
+    public boolean shouldCloseOnEsc() {
+        if (pendingChanges()) {
+            setSaveButtonMessage(Component.translatable("yacl.gui.save_before_exit").withStyle(ChatFormatting.RED), Component.translatable("yacl.gui.save_before_exit.tooltip"));
+            return false;
+        }
+        return true;
+    }
+
+    @Override
+    public void onClose() {
+        GuiUtils.setScreen(parent);
+    }
+
+    public static void renderMultilineTooltip(GuiGraphicsExtractor graphics, Font font, MultiLineLabel text, int centerX, int yAbove, int yBelow, int screenWidth, int screenHeight) {
+        if (text.getLineCount() > 0) {
+            int maxWidth = text.getWidth();
+            int lineHeight = font.lineHeight + 1;
+            int height = text.getLineCount() * lineHeight - 1;
+
+            int belowY = yBelow + 12;
+            int aboveY = yAbove - height + 12;
+            int maxBelow = screenHeight - (belowY + height);
+            int minAbove = aboveY - height;
+            int y = aboveY;
+            if (minAbove < 8)
+                y = maxBelow > minAbove ? belowY : aboveY;
+
+            int x = Math.max(centerX - text.getWidth() / 2 - 12, -6);
+
+            int drawX = x + 12;
+            int drawY = y - 12;
+
+            graphics.pose().pushMatrix();
+            TooltipRenderUtil.extractTooltipBackground(
+                    graphics,
+                    drawX,
+                    drawY,
+                    maxWidth,
+                    height
+                    ,null
+            );
+
+            text.visitLines(net.minecraft.client.gui.TextAlignment.LEFT, drawX, drawY, lineHeight, graphics.textRenderer());
+
+            graphics.pose().popMatrix();
+        }
+    }
+
+    public void updateGlobalSearch(String search) {
+        Tab nextTabWithSearch = null;
+        if (preferredTab != null) {
+            preferredTab.optionList.getType().updateSearchQuery(search);
+            if (preferredTab.hasSearch()) nextTabWithSearch = preferredTab;
+        }
+        Tab currentTab = tabNavigationBar.getTabManager().getCurrentTab();
+        int cursorPos = currentTab instanceof CategoryTab categoryTab ? categoryTab.searchField.getCursorPosition() : -1;
+
+        for (int i = 0; i < tabNavigationBar.getTabs().size(); i++) {
+            Tab tab = tabNavigationBar.getTabs().get(i);
+            if (tab == preferredTab) continue;
+            if (tab instanceof CategoryTab categoryTab) {
+                categoryTab.optionList.getType().updateSearchQuery(search);
+                categoryTab.searchField.setValueDoNotUpdate(search);
+                if (cursorPos != -1) categoryTab.searchField.setCursorPosition(cursorPos);
+                if (nextTabWithSearch == null && categoryTab.hasSearch()) {
+                    nextTabWithSearch = categoryTab;
+                }
+            }
+        }
+        // switch if the next tab is the preferred one or switch if the current tab does not have the search
+        if (nextTabWithSearch != null && nextTabWithSearch != currentTab && (nextTabWithSearch == preferredTab || !(currentTab instanceof CategoryTab categoryTab && categoryTab.hasSearch()))) {
+            tabManager.setCurrentTab(nextTabWithSearch, false);
+            if (nextTabWithSearch instanceof CategoryTab newTab) {
+                setFocused(newTab.searchField);
+            }
+        }
+        tabNavigationBar.updateTabNames();
+    }
+
+    @Override
+    public void setFocused(@Nullable GuiEventListener focused) {
+        super.setFocused(focused);
+        if (focused != null && !(focused instanceof SearchFieldWidget)) preferredTab = null;
+    }
+
+    public static class CategoryTab implements TabExt {
+        private static final Identifier DARKER_BG = YACLPlatform.mcRl("textures/gui/menu_list_background.png");
+
+        private final YACLScreen screen;
+        private final ConfigCategory category;
+        private final Tooltip tooltip;
+
+        private WidgetAndType<OptionListWidget> optionList;
+        public final Button saveFinishedButton;
+        public final Button cancelResetButton;
+        public final Button undoButton;
+        private final SearchFieldWidget searchField;
+        private OptionDescriptionWidget descriptionWidget;
+
+        private final ScreenRectangle rightPaneDim;
+
+        public CategoryTab(YACLScreen screen, ConfigCategory category, ScreenRectangle tabArea) {
+            this.screen = screen;
+            this.category = category;
+            this.tooltip = Tooltip.create(category.tooltip());
+
+            int columnWidth = screen.width / 3;
+            int padding = columnWidth / 20;
+            columnWidth = Math.min(columnWidth, 400);
+            int paddedWidth = columnWidth - padding * 2;
+            rightPaneDim = new ScreenRectangle(screen.width / 3 * 2, tabArea.top() + 1, screen.width / 3, tabArea.height());
+            MutableDimension<Integer> actionDim = Dimension.ofInt(screen.width / 3 * 2 + screen.width / 6, screen.height - padding - 20, paddedWidth, 20);
+
+            saveFinishedButton = Button.builder(Component.literal("Done"), btn -> screen.finishOrSave())
+                    .pos(actionDim.x() - actionDim.width() / 2, actionDim.y())
+                    .size(actionDim.width(), actionDim.height())
+                    .build();
+
+            actionDim.expand(-actionDim.width() / 2 - 2, 0).move(-actionDim.width() / 2 - 2, -22);
+            cancelResetButton = Button.builder(Component.literal("Cancel"), btn -> screen.cancelOrReset())
+                    .pos(actionDim.x() - actionDim.width() / 2, actionDim.y())
+                    .size(actionDim.width(), actionDim.height())
+                    .build();
+
+            actionDim.move(actionDim.width() + 4, 0);
+            undoButton = Button.builder(Component.translatable("yacl.gui.undo"), btn -> screen.undo())
+                    .pos(actionDim.x() - actionDim.width() / 2, actionDim.y())
+                    .size(actionDim.width(), actionDim.height())
+                    .tooltip(Tooltip.create(Component.translatable("yacl.gui.undo.tooltip")))
+                    .build();
+
+            this.searchField = new SearchFieldWidget(
+                    screen,
+                    screen.font,
+                    screen.width / 3 * 2 + screen.width / 6 - paddedWidth / 2 + 1,
+                    undoButton.getY() - 22,
+                    paddedWidth - 2, 18,
+                    Component.translatable("gui.recipebook.search_hint"),
+                    Component.translatable("gui.recipebook.search_hint"),
+                    s -> {
+                        if (screen.preferredTab == null) screen.preferredTab = this;
+                        screen.updateGlobalSearch(s);
+
+                    }
+            );
+
+            this.optionList = YACLSelectionList.asWidget(
+                    new OptionListWidget(screen, category, screen.minecraft, 0, 0, screen.width / 3 * 2 + 1, screen.height, desc -> {
+                        descriptionWidget.setOptionDescription(desc);
+                    })
+            );
+
+            this.descriptionWidget = new OptionDescriptionWidget(
+                    () -> new ScreenRectangle(
+                            screen.width / 3 * 2 + padding,
+                            tabArea.top() + padding,
+                            paddedWidth,
+                            searchField.getY() - 1 - tabArea.top() - padding * 2
+                    ),
+                    null
+            );
+
+            updateButtons();
+        }
+
+        public boolean hasSearch() {
+            return optionList.getType().children().stream().anyMatch(o -> o.searchQueryMatches);
+        }
+
+        @Override
+        public Component getTabTitle() {
+            MutableComponent copy = category.name().copy();
+            if (!hasSearch()) {
+                copy.withStyle(ChatFormatting.DARK_GRAY, ChatFormatting.STRIKETHROUGH);
+            }
+            return copy;
+        }
+
+        @Override
+        public void visitChildren(Consumer<AbstractWidget> consumer) {
+            consumer.accept(optionList.getWidget());
+            consumer.accept(saveFinishedButton);
+            consumer.accept(cancelResetButton);
+            consumer.accept(undoButton);
+            consumer.accept(searchField);
+            consumer.accept(descriptionWidget);
+        }
+
+        @Override
+        public void renderBackground(GuiGraphicsExtractor graphics) {
+            // right pane darker bg
+            graphics.blit(
+                    RenderPipelines.GUI_TEXTURED,
+                    DARKER_BG,
+                    rightPaneDim.left(), rightPaneDim.top(),
+                    (float) (rightPaneDim.right() + 2), (float) (rightPaneDim.bottom() + 2),
+                    rightPaneDim.width() + 2, rightPaneDim.height() + 2,
+                    32, 32
+            );
+
+            // top separator for right pane
+            graphics.pose().pushMatrix();
+            graphics.blit(
+                    RenderPipelines.GUI_TEXTURED,
+                    CreateWorldScreen.HEADER_SEPARATOR,
+                    rightPaneDim.left() - 1, rightPaneDim.top() - 2,
+                    0.0F, 0.0F,
+                    rightPaneDim.width() + 1, 2,
+                    32, 2
+            );
+            graphics.pose().popMatrix();
+
+            // left separator for right pane
+            graphics.pose().pushMatrix();
+            graphics.pose().translate(rightPaneDim.left(), rightPaneDim.top() - 1);
+            graphics.pose().rotate((float) Math.toRadians(90));
+            graphics.blit(
+                    RenderPipelines.GUI_TEXTURED,
+                    CreateWorldScreen.FOOTER_SEPARATOR,
+                    0, 0,
+                    0f, 0f,
+                    rightPaneDim.height() + 1, 2,
+                    32, 2
+            );
+            graphics.pose().popMatrix();
+        }
+
+        @Override
+        public void doLayout(ScreenRectangle tabArea) {
+            var rect = new ScreenRectangle(tabArea.position(), tabArea.width() / 3 * 2, tabArea.height());
+            optionList.getType().setX(rect.left());
+            optionList.getType().setY(rect.top());
+            optionList.getType().setWidth(rect.width());
+            optionList.getType().setHeight(rect.height());
+        }
+
+        @Override
+        public void tick() {
+            descriptionWidget.tick();
+        }
+
+        @Nullable
+        @Override
+        public Tooltip getTooltip() {
+            return tooltip;
+        }
+
+        public void updateButtons() {
+            boolean pendingChanges = screen.pendingChanges();
+
+            undoButton.active = pendingChanges;
+            saveFinishedButton.setMessage(pendingChanges ? Component.translatable("yacl.gui.save") : GuiUtils.translatableFallback("yacl.gui.done", CommonComponents.GUI_DONE));
+            saveFinishedButton.setTooltip(Tooltip.create(pendingChanges ? Component.translatable("yacl.gui.save.tooltip") : Component.translatable("yacl.gui.finished.tooltip")));
+            cancelResetButton.setMessage(pendingChanges ? GuiUtils.translatableFallback("yacl.gui.cancel", CommonComponents.GUI_CANCEL) : Component.translatable("controls.reset"));
+            cancelResetButton.setTooltip(Tooltip.create(pendingChanges ? Component.translatable("yacl.gui.cancel.tooltip") : Component.translatable("yacl.gui.reset.tooltip")));
+        }
+    }
+
+    public static class PlaceholderTab implements TabExt {
+        private final YACLScreen screen;
+        private final PlaceholderCategory category;
+        private final Tooltip tooltip;
+
+        public PlaceholderTab(PlaceholderCategory category, YACLScreen screen) {
+            this.screen = screen;
+            this.category = category;
+            this.tooltip = Tooltip.create(category.tooltip());
+        }
+
+        @Override
+        public Component getTabTitle() {
+            return category.name();
+        }
+
+        @Override
+        public void visitChildren(Consumer<AbstractWidget> consumer) {
+
+        }
+
+        @Override
+        public void doLayout(ScreenRectangle screenRectangle) {
+            GuiUtils.setScreen(category.screen().apply(screen.minecraft, screen));
+        }
+
+        @Override
+        public @Nullable Tooltip getTooltip() {
+            return this.tooltip;
+        }
+    }
+}

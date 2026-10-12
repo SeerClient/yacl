@@ -1,0 +1,131 @@
+package dev.isxander.yacl3.gui.image;
+
+import com.mojang.blaze3d.systems.RenderSystem;
+import dev.isxander.yacl3.gui.image.impl.AnimatedDynamicTextureImage;
+import dev.isxander.yacl3.impl.utils.YACLConstants;
+import dev.isxander.yacl3.platform.YACLConfig;
+import net.minecraft.client.Minecraft;
+import net.minecraft.resources.Identifier;
+
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.concurrent.*;
+import java.util.function.Function;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
+import java.util.stream.Stream;
+
+public class ImageRendererManager {
+    private static final ExecutorService SINGLE_THREAD_EXECUTOR = Executors.newSingleThreadExecutor(task -> new Thread(task, "YACL Image Prep"));
+
+    private static final Map<Identifier, CompletableFuture<ImageRenderer>> IMAGE_CACHE = new ConcurrentHashMap<>();
+    static final Map<Identifier, ImageRenderer> PRELOADED_IMAGE_CACHE = new ConcurrentHashMap<>();
+
+    static final List<PreloadedImageFactory> PRELOADED_IMAGE_FACTORIES = Stream.of(
+            YACLConfig.HANDLER.instance().preloadComplexImageFormats ? new PreloadedImageFactory(
+                    location -> location.getPath().endsWith(".webp"),
+                    AnimatedDynamicTextureImage::createWEBPFromTexture
+            ) : null,
+            YACLConfig.HANDLER.instance().preloadComplexImageFormats ? new PreloadedImageFactory(
+                    location -> location.getPath().endsWith(".gif"),
+                    AnimatedDynamicTextureImage::createGIFFromTexture
+            ) : null
+    ).filter(Objects::nonNull).toList();
+
+    public static <T extends ImageRenderer> Optional<T> getImage(Identifier id) {
+        if (PRELOADED_IMAGE_CACHE.containsKey(id)) {
+            return Optional.of((T) PRELOADED_IMAGE_CACHE.get(id));
+        }
+
+        if (IMAGE_CACHE.containsKey(id)) {
+            return Optional.ofNullable((T) IMAGE_CACHE.get(id).getNow(null));
+        }
+
+        return Optional.empty();
+    }
+
+    @SuppressWarnings("unchecked")
+    public static <T extends ImageRenderer> CompletableFuture<T> registerOrGetImage(Identifier id, Supplier<ImageRendererFactory> factorySupplier) {
+        if (PRELOADED_IMAGE_CACHE.containsKey(id)) {
+            return CompletableFuture.completedFuture((T) PRELOADED_IMAGE_CACHE.get(id));
+        }
+
+        if (IMAGE_CACHE.containsKey(id)) {
+            return (CompletableFuture<T>) IMAGE_CACHE.get(id);
+        }
+
+        var future = new CompletableFuture<ImageRenderer>();
+        IMAGE_CACHE.put(id, future);
+
+        ImageRendererFactory factory = factorySupplier.get();
+        SINGLE_THREAD_EXECUTOR.submit(() -> {
+            Supplier<Optional<ImageRendererFactory.ImageSupplier>> supplier =
+                    factory.requiresOffThreadPreparation()
+                            ? new CompletedSupplier<>(safelyPrepareFactory(id, factory))
+                            : () -> safelyPrepareFactory(id, factory);
+
+            Minecraft.getInstance().execute(() -> completeImageFactory(id, supplier, future));
+        });
+
+        return (CompletableFuture<T>) future;
+    }
+
+    @Deprecated
+    public static <T extends ImageRenderer> CompletableFuture<T> registerImage(Identifier id, ImageRendererFactory factory) {
+        return registerOrGetImage(id, () -> factory);
+    }
+
+    private static <T extends ImageRenderer> void completeImageFactory(Identifier id, Supplier<Optional<ImageRendererFactory.ImageSupplier>> supplier, CompletableFuture<ImageRenderer> future) {
+        RenderSystem.assertOnRenderThread();
+
+        ImageRendererFactory.ImageSupplier completableImage = supplier.get().orElse(null);
+        if (completableImage == null) {
+            return;
+        }
+
+        // sanity check - this should never happen
+        if (future.isDone()) {
+            YACLConstants.LOGGER.error("Image '{}' was already completed", id);
+            return;
+        }
+
+        ImageRenderer image;
+        try {
+            image = completableImage.completeImage();
+        } catch (Exception e) {
+            YACLConstants.LOGGER.error("Failed to create image '{}'", id, e);
+            return;
+        }
+
+        future.complete(image);
+    }
+
+    public static void closeAll() {
+        SINGLE_THREAD_EXECUTOR.shutdownNow();
+        IMAGE_CACHE.values().removeIf(future -> {
+            if (future.isDone()) {
+                future.join().close();
+            }
+            return true;
+        });
+    }
+
+    static Optional<ImageRendererFactory.ImageSupplier> safelyPrepareFactory(Identifier id, ImageRendererFactory factory) {
+        try {
+            return Optional.of(factory.prepareImage());
+        } catch (Exception e) {
+            YACLConstants.LOGGER.error("Failed to prepare image '{}'", id, e);
+            IMAGE_CACHE.remove(id);
+            return Optional.empty();
+        }
+    }
+
+    public record PreloadedImageFactory(Predicate<Identifier> predicate, Function<Identifier, ImageRendererFactory> factory) {
+    }
+
+    private record CompletedSupplier<T>(T get) implements Supplier<T> {
+    }
+
+}

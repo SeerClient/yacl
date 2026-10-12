@@ -1,0 +1,12 @@
+{
+  "required": true,
+  "package": "dev.isxander.yacl3.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "yet_another_config_lib_v3.refmap.json",
+  "injectors": {
+    "defaultRequire": 1
+  },
+  "client": [
+    "ContainerEventHandlerMixin"
+  ]
+}
