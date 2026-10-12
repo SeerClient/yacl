@@ -1,42 +1,39 @@
-//! Ported from dev.isxander.yacl3.api.LabelOption by fabric2seer.
+//! Ported from dev.isxander.yacl3.api.LabelOption.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
+use crate::dev::isxander::yacl3::api::option::Option as YOption;
 use crate::dev::isxander::yacl3::api::state_manager::StateManager;
-use crate::dev::isxander::yacl3::r#impl::label_option_impl::BuilderImpl;
-use crate::dev::isxander::yacl3::r#impl::label_option_impl::LabelOptionImpl;
+use crate::dev::isxander::yacl3::r#impl::label_option_impl::{BuilderImpl, LabelOptionImpl};
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
 
 /// java: public interface LabelOption extends Option<Component>
-pub trait LabelOption: crate::dev::isxander::yacl3::api::option::Option + compat::DynAny {
-    /// java: @NotNull Component label(); (dispatch: the body for this class)
-    fn label(&self) -> fn(&compat::Shared<dyn LabelOption>) -> MutableComponent;
-
+pub trait LabelOption: YOption<MutableComponent> {
+    /// java: @NotNull Component label();
+    fn label(&self) -> MutableComponent;
 }
 
 /// java: static LabelOption create(@NotNull Component label)
-pub fn create(label: &MutableComponent) -> compat::Shared<dyn LabelOption> {
-    return (LabelOptionImpl::new_1(label.clone()) as compat::Shared<dyn LabelOption>);
+pub fn create(label: MutableComponent) -> Arc<dyn LabelOption> {
+    LabelOptionImpl::new_1(label)
 }
 
 /// java: static Builder createBuilder()
-pub fn create_builder() -> compat::Shared<dyn Builder> {
-    return (BuilderImpl::new() as compat::Shared<dyn Builder>);
+pub fn create_builder() -> BuilderImpl {
+    BuilderImpl::new()
 }
 
-/// java: interface Builder
-pub trait Builder: compat::DynAny {
-    fn as_any(&self) -> &dyn std::any::Any;
-    /// java: Builder state(@NotNull StateManager<Component> stateManager); (dispatch: the body for this class)
-    fn state(&self) -> fn(&compat::Shared<dyn Builder>, compat::Shared<dyn StateManager<MutableComponent>>) -> compat::Shared<dyn Builder>;
+/// java: interface Builder (setters by value, Java's `return this`)
+pub trait Builder: Sized {
+    /// java: Builder state(@NotNull StateManager<Component> stateManager);
+    fn state(self, state_manager: Arc<dyn StateManager<MutableComponent>>) -> Self;
 
-    /// java: Builder line(@NotNull Component line); (dispatch: the body for this class)
-    fn line(&self) -> fn(&compat::Shared<dyn Builder>, MutableComponent) -> compat::Shared<dyn Builder>;
+    /// java: Builder line(@NotNull Component line);
+    fn line(self, line: MutableComponent) -> Self;
 
-    /// java: Builder lines(@NotNull Collection<? extends Component> lines); (dispatch: the body for this class)
-    fn lines(&self) -> fn(&compat::Shared<dyn Builder>, &Vec<MutableComponent>) -> compat::Shared<dyn Builder>;
+    /// java: Builder lines(@NotNull Collection<? extends Component> lines);
+    fn lines(self, lines: Vec<MutableComponent>) -> Self;
 
-    /// java: LabelOption build(); (dispatch: the body for this class)
-    fn build(&self) -> fn(&compat::Shared<dyn Builder>) -> compat::Shared<dyn LabelOption>;
-
+    /// java: LabelOption build();
+    fn build(self) -> Arc<dyn LabelOption>;
 }

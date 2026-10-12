@@ -1,4 +1,4 @@
-//! Ported from dev.isxander.yacl3.api.StateManager by fabric2seer.
+//! Ported from dev.isxander.yacl3.api.StateManager.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
@@ -10,73 +10,87 @@ use crate::dev::isxander::yacl3::r#impl::simple_state_manager::SimpleStateManage
 use crate::dev::isxander::yacl3::r#impl::x_mapped_state_manager::XMappedStateManager;
 
 /// java: public interface StateManager<T>
-pub trait StateManager<T: Clone + 'static> {
-    fn as_any(&self) -> &dyn std::any::Any;
+pub trait StateManager<T: Clone + 'static>: compat::DynAny {
     /// java: void set(T value);
-    fn set(&mut self, value: T);
+    fn set(&self, value: T);
 
     /// java: T get();
     fn get(&self) -> T;
 
     /// java: void apply();
-    fn apply(&mut self);
+    fn apply(&self);
 
     /// java: void resetToDefault(ResetAction action);
-    fn reset_to_default(&mut self, action: ResetAction);
+    fn reset_to_default(&self, action: ResetAction);
 
     /// java: void sync();
-    fn sync(&mut self);
+    fn sync(&self);
 
     /// java: boolean isSynced();
     fn is_synced(&self) -> bool;
 
     /// java: default boolean isAlwaysSynced()
     fn is_always_synced(&self) -> bool {
-        return false;
+        false
     }
 
     /// java: boolean isDefault();
     fn is_default(&self) -> bool;
 
     /// java: void addListener(StateListener<T> stateListener);
-    fn add_listener(&mut self, state_listener: &compat::Shared<dyn StateListener<T>>);
+    fn add_listener(&self, state_listener: Arc<dyn StateListener<T>>);
 
-    /// java: default <U> StateManager<U> xmap(Function<T, U> to, Function<U, @Nullable T> from)
-    fn xmap<U: 'static>(&self, to: Arc<dyn Fn(T) -> U>, from: Arc<dyn Fn(U) -> Option<T>>) -> compat::Shared<dyn StateManager<U>> where Self: Sized {
-        // TODO(fabric2seer): `this` handed on as a reference other objects keep: the object has no shared handle to itself (port by hand)
-        //   java: return new XMappedStateManager<>(this, to, from);
-        todo!("fabric2seer: the value of this function is in a TODO above")
+    /// `stateManager instanceof ProvidesBindingForDeprecation p ? p.getBinding() : null` (OptionImpl.binding,
+    /// ListOptionImpl.binding): the binding of a state manager whose class implements `ProvidesBindingForDeprecation`.
+    fn get_binding_for_deprecation(&self) -> std::option::Option<Arc<dyn Binding<T>>> {
+        None
     }
+}
 
+/// java: default <U> StateManager<U> xmap(Function<T, U> to, Function<U, @Nullable T> from)
+pub fn xmap<T: Clone + 'static, U: Clone + 'static>(
+    this: &Arc<dyn StateManager<T>>,
+    to: impl Fn(T) -> U + 'static,
+    from: impl Fn(U) -> std::option::Option<T> + 'static,
+) -> Arc<dyn StateManager<U>> {
+    Arc::new(XMappedStateManager::new(this.clone(), Arc::new(to), Arc::new(from)))
 }
 
 /// java: static <T> StateManager<T> createSimple(Binding<T> binding)
-pub fn create_simple<T: 'static>(binding: &compat::Shared<dyn Binding<T>>) -> compat::Shared<dyn StateManager<T>> {
-    return (compat::shared(SimpleStateManager::new(binding.clone())) as compat::Shared<dyn StateManager<compat::Object>>);
+pub fn create_simple<T: Clone + PartialEq + 'static>(binding: Arc<dyn Binding<T>>) -> Arc<dyn StateManager<T>> {
+    Arc::new(SimpleStateManager::new(binding))
 }
 
 /// java: static <T> StateManager<T> createSimple(@NotNull T def, @NotNull Supplier<@NotNull T> getter, @NotNull Consumer<@NotNull T> setter)
-pub fn create_simple_3<T: 'static>(def: &T, getter: Arc<dyn Fn() -> T>, setter: Arc<dyn Fn(T)>) -> compat::Shared<dyn StateManager<T>> {
-    return (compat::shared(SimpleStateManager::new(binding::generic(def, getter.clone(), setter.clone()))) as compat::Shared<dyn StateManager<compat::Object>>);
+pub fn create_simple_3<T: Clone + PartialEq + 'static>(
+    def: T,
+    getter: impl Fn() -> T + 'static,
+    setter: impl Fn(T) + 'static,
+) -> Arc<dyn StateManager<T>> {
+    Arc::new(SimpleStateManager::new(binding::generic(def, getter, setter)))
 }
 
 /// java: static <T> StateManager<T> createInstant(Binding<T> binding)
-pub fn create_instant<T: 'static>(binding: &compat::Shared<dyn Binding<T>>) -> compat::Shared<dyn StateManager<T>> {
-    return (compat::shared(InstantStateManager::new(binding.clone())) as compat::Shared<dyn StateManager<compat::Object>>);
+pub fn create_instant<T: Clone + PartialEq + 'static>(binding: Arc<dyn Binding<T>>) -> Arc<dyn StateManager<T>> {
+    Arc::new(InstantStateManager::new(binding))
 }
 
 /// java: static <T> StateManager<T> createInstant(@NotNull T def, @NotNull Supplier<@NotNull T> getter, @NotNull Consumer<@NotNull T> setter)
-pub fn create_instant_3<T: 'static>(def: &T, getter: Arc<dyn Fn() -> T>, setter: Arc<dyn Fn(T)>) -> compat::Shared<dyn StateManager<T>> {
-    return (compat::shared(InstantStateManager::new(binding::generic(def, getter.clone(), setter.clone()))) as compat::Shared<dyn StateManager<compat::Object>>);
+pub fn create_instant_3<T: Clone + PartialEq + 'static>(
+    def: T,
+    getter: impl Fn() -> T + 'static,
+    setter: impl Fn(T) + 'static,
+) -> Arc<dyn StateManager<T>> {
+    Arc::new(InstantStateManager::new(binding::generic(def, getter, setter)))
 }
 
 /// java: static <T> StateManager<T> createImmutable(@NotNull T value)
-pub fn create_immutable<T: Clone + 'static>(value: &T) -> compat::Shared<dyn StateManager<T>> {
-    return (compat::shared(ImmutableStateManager::new(value.clone())) as compat::Shared<dyn StateManager<compat::Object>>);
+pub fn create_immutable<T: Clone + 'static>(value: T) -> Arc<dyn StateManager<T>> {
+    Arc::new(ImmutableStateManager::new(value))
 }
 
 /// java: enum ResetAction
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ResetAction {
     ByOption,
     ByGlobal,
@@ -111,7 +125,6 @@ impl ResetAction {
             _ => panic!("IllegalArgumentException: No enum constant ResetAction.{name}"),
         }
     }
-
 }
 
 impl std::fmt::Display for ResetAction {
@@ -120,25 +133,27 @@ impl std::fmt::Display for ResetAction {
     }
 }
 
-/// java: interface StateListener<T>
+/// java: interface StateListener<T> (a functional interface: any `Fn(T, T)` is one)
 pub trait StateListener<T: Clone + 'static> {
-    fn as_any(&self) -> &dyn std::any::Any;
     /// java: void onStateChange(T oldValue, T newValue);
-    fn on_state_change(&self, old_value: &T, new_value: &T);
+    fn on_state_change(&self, old_value: T, new_value: T);
+}
 
-    /// java: default StateListener<T> andThen(StateListener<T> after)
-    fn and_then(&self, after: &compat::Shared<dyn StateListener<T>>) -> compat::Shared<dyn StateListener<T>> {
-        return Arc::new(move |old_value, new_value| {
-            self.on_state_change(&old_value, &new_value);
-            after.lock().borrow().on_state_change(&old_value, &new_value);
-        });
+impl<T: Clone + 'static, F: Fn(T, T)> StateListener<T> for F {
+    fn on_state_change(&self, old_value: T, new_value: T) {
+        self(old_value, new_value)
     }
+}
 
+/// java: default StateListener<T> andThen(StateListener<T> after)
+pub fn and_then<T: Clone + 'static>(this: Arc<dyn StateListener<T>>, after: Arc<dyn StateListener<T>>) -> Arc<dyn StateListener<T>> {
+    Arc::new(move |old_value: T, new_value: T| {
+        this.on_state_change(old_value.clone(), new_value.clone());
+        after.on_state_change(old_value, new_value);
+    })
 }
 
 /// java: static <T> StateListener<T> noop()
-pub fn noop<T: 'static>() -> compat::Shared<dyn StateListener<T>> {
-    return Arc::new(move |old_value, new_value| {
-
-        });
+pub fn noop<T: Clone + 'static>() -> Arc<dyn StateListener<T>> {
+    Arc::new(|_old_value: T, _new_value: T| {})
 }

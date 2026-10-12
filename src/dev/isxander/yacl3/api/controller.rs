@@ -1,24 +1,26 @@
-//! Ported from dev.isxander.yacl3.api.Controller by fabric2seer.
+//! Ported from dev.isxander.yacl3.api.Controller.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
+use crate::dev::isxander::yacl3::api::option::Option as YOption;
 use crate::dev::isxander::yacl3::api::utils::dimension::Dimension;
 use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget;
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
 
 /// java: public interface Controller<T>
-pub trait Controller<T: Clone + 'static> {
-    fn as_any(&self) -> &dyn std::any::Any;
+///
+/// `provideWidget` takes the controller's own reference (`self: Arc<Self>`): the widget it builds keeps the controller
+/// (Java's `new XControllerElement(this, ..)`).
+pub trait Controller<T: Clone + 'static>: compat::DynAny {
     /// java: Option<T> option();
-    fn option(&self) -> compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<T>>;
+    fn option(&self) -> Arc<dyn YOption<T>>;
 
     /// java: Component formatValue();
     fn format_value(&self) -> MutableComponent;
 
     /// java: AbstractWidget provideWidget(YACLScreen screen, Dimension<Integer> widgetDimension);
-    fn provide_widget(&self, screen: &compat::Shared<YACLScreen>, widget_dimension: &compat::Shared<dyn Dimension<i32>>) -> compat::Shared<dyn AbstractWidget>;
-
+    fn provide_widget(self: Arc<Self>, screen: &Arc<YACLScreen>, widget_dimension: Arc<dyn Dimension<i32>>) -> Arc<dyn AbstractWidget>;
 }
 
 // the package's other modules

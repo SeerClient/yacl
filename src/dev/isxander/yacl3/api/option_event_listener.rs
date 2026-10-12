@@ -1,18 +1,26 @@
-//! Ported from dev.isxander.yacl3.api.OptionEventListener by fabric2seer.
+//! Ported from dev.isxander.yacl3.api.OptionEventListener.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
+use crate::dev::isxander::yacl3::api::option::Option as YOption;
 
 /// java: @FunctionalInterface public interface OptionEventListener<T>
+///
+/// Any `Fn(&dyn Option<T>, Event)` is one. The option is handed as the reference the call borrows (Java's `this`
+/// of the option that fires); keep its `Arc` from where it was built if the listener must hold on to it.
 pub trait OptionEventListener<T: Clone + 'static> {
-    fn as_any(&self) -> &dyn std::any::Any;
     /// java: void onEvent(Option<T> option, Event event);
-    fn on_event(&self, option: &compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<T>>, event: Event);
+    fn on_event(&self, option: &dyn YOption<T>, event: Event);
+}
 
+impl<T: Clone + 'static, F: Fn(&dyn YOption<T>, Event)> OptionEventListener<T> for F {
+    fn on_event(&self, option: &dyn YOption<T>, event: Event) {
+        self(option, event)
+    }
 }
 
 /// java: enum Event
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Event {
     Initial,
     StateChange,
@@ -50,10 +58,9 @@ impl Event {
             "STATE_CHANGE" => Event::StateChange,
             "AVAILABILITY_CHANGE" => Event::AvailabilityChange,
             "OTHER" => Event::Other,
-            _ => panic!("IllegalArgumentException: No enum constant Event.{name}"),
+            _ => panic!("IllegalArgumentException: No enum constant OptionEventListener.Event.{name}"),
         }
     }
-
 }
 
 impl std::fmt::Display for Event {

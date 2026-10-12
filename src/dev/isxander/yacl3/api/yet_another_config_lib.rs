@@ -1,4 +1,4 @@
-//! Ported from dev.isxander.yacl3.api.YetAnotherConfigLib by fabric2seer.
+//! Ported from dev.isxander.yacl3.api.YetAnotherConfigLib.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
@@ -11,129 +11,107 @@ use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
 
 /// java: public interface YetAnotherConfigLib
 pub trait YetAnotherConfigLib: compat::DynAny {
-    fn as_any(&self) -> &dyn std::any::Any;
-    /// java: Component title(); (dispatch: the body for this class)
-    fn title(&self) -> fn(&compat::Shared<dyn YetAnotherConfigLib>) -> MutableComponent;
+    /// java: Component title();
+    fn title(&self) -> MutableComponent;
 
-    /// java: ImmutableList<ConfigCategory> categories(); (dispatch: the body for this class)
-    fn categories(&self) -> fn(&compat::Shared<dyn YetAnotherConfigLib>) -> Vec<compat::Shared<dyn ConfigCategory>>;
+    /// java: ImmutableList<ConfigCategory> categories();
+    fn categories(&self) -> Vec<Arc<dyn ConfigCategory>>;
 
-    /// java: Runnable saveFunction(); (dispatch: the body for this class)
-    fn save_function(&self) -> fn(&compat::Shared<dyn YetAnotherConfigLib>) -> Arc<dyn Fn()>;
+    /// java: Runnable saveFunction();
+    fn save_function(&self) -> Arc<dyn Fn()>;
 
-    /// java: Consumer<YACLScreen> initConsumer(); (dispatch: the body for this class)
-    fn init_consumer(&self) -> fn(&compat::Shared<dyn YetAnotherConfigLib>) -> Arc<dyn Fn(compat::Shared<YACLScreen>)>;
+    /// java: Consumer<YACLScreen> initConsumer();
+    fn init_consumer(&self) -> Arc<dyn Fn(&Arc<YACLScreen>)>;
 
-    /// java: Screen generateScreen(@Nullable Screen parent); (dispatch: the body for this class)
-    fn generate_screen(&self) -> fn(&compat::Shared<dyn YetAnotherConfigLib>, Option<mcrust::net::minecraft::client::gui::screens::screen::Screen>) -> mcrust::net::minecraft::client::gui::screens::screen::Screen;
-
+    /// java: Screen generateScreen(@Nullable Screen parent);
+    ///
+    /// The screen is opened with `ScreenRef::set()` (Java's `minecraft.setScreen(..)`). `parent` is
+    /// `Some(ScreenRef::Current)` for the screen that is up (the YACL screen returns to it on close), `None` for none.
+    fn generate_screen(self: Arc<Self>, parent: Option<compat::ScreenRef>) -> compat::ScreenRef;
 }
 
 /// java: static Builder createBuilder()
-pub fn create_builder() -> compat::Shared<dyn Builder> {
-    return (BuilderImpl::new() as compat::Shared<dyn Builder>);
+pub fn create_builder() -> BuilderImpl {
+    BuilderImpl::new()
 }
 
 /// java: static <T> YetAnotherConfigLib create(ConfigClassHandler<T> configHandler, ConfigBackedBuilder<T> builder)
-pub fn create<T: 'static>(config_handler: &compat::Shared<dyn ConfigClassHandler<T>>, builder: &compat::Shared<dyn ConfigBackedBuilder<T>>) -> compat::Shared<dyn YetAnotherConfigLib> {
-    return ({ let __r = &{ let (__a0, __a1, __a2,) = (&config_handler.lock().borrow().defaults(), &config_handler.lock().borrow().instance(), &({ let __r = &create_builder(); let __f = compat::dispatch(__r, |__t| __t.save()); __f(__r, Arc::new(move || { config_handler.lock().borrow().save(); })) }),); builder.lock().borrow().build(__a0, __a1, __a2) }; let __f = compat::dispatch(__r, |__t| __t.build()); __f(__r) });
+pub fn create<T: 'static>(
+    config_handler: Arc<dyn ConfigClassHandler<T>>,
+    builder: &dyn ConfigBackedBuilder<compat::Shared<T>>,
+) -> Arc<dyn YetAnotherConfigLib> {
+    let handler = config_handler.clone();
+    builder.build(config_handler.defaults(), config_handler.instance(), create_builder().save(move || handler.save())).build()
 }
 
 /// java: @Deprecated static <T> YetAnotherConfigLib create(ConfigInstance<T> configInstance, ConfigBackedBuilder<T> builder)
-pub fn create_config_instance_config_backed_builder<T: 'static>(config_instance: &compat::Shared<dyn ConfigInstance<T>>, builder: &compat::Shared<dyn ConfigBackedBuilder<T>>) -> compat::Shared<dyn YetAnotherConfigLib> {
-    return ({ let __r = &{ let (__a0, __a1, __a2,) = (&config_instance.lock().borrow().get_defaults(), &config_instance.lock().borrow().get_config(), &({ let __r = &create_builder(); let __f = compat::dispatch(__r, |__t| __t.save()); __f(__r, Arc::new(move || { config_instance.lock().borrow().save(); })) }),); builder.lock().borrow().build(__a0, __a1, __a2) }; let __f = compat::dispatch(__r, |__t| __t.build()); __f(__r) });
+pub fn create_config_instance_config_backed_builder<T: 'static>(
+    config_instance: Arc<dyn ConfigInstance<T>>,
+    builder: &dyn ConfigBackedBuilder<compat::Shared<T>>,
+) -> Arc<dyn YetAnotherConfigLib> {
+    let instance = config_instance.clone();
+    builder.build(config_instance.get_defaults(), config_instance.get_config(), create_builder().save(move || instance.save())).build()
 }
 
-/// java: interface Builder
-pub trait Builder: compat::DynAny {
-    fn as_any(&self) -> &dyn std::any::Any;
-    /// java: Builder title(@NotNull Component title); (dispatch: the body for this class)
-    fn title(&self) -> fn(&compat::Shared<dyn Builder>, MutableComponent) -> compat::Shared<dyn Builder>;
+/// java: interface Builder (setters by value, Java's `return this`)
+pub trait Builder: Sized {
+    /// java: Builder title(@NotNull Component title);
+    fn title(self, title: MutableComponent) -> Self;
 
-    /// java: Builder category(@NotNull ConfigCategory category); (dispatch: the body for this class)
-    fn category(&self) -> fn(&compat::Shared<dyn Builder>, compat::Shared<dyn ConfigCategory>) -> compat::Shared<dyn Builder>;
+    /// java: Builder category(@NotNull ConfigCategory category);
+    fn category(self, category: Arc<dyn ConfigCategory>) -> Self;
 
-    /// java: default Builder category(@NotNull Supplier<@NotNull ConfigCategory> categorySupplier) (dispatch: the body for this class)
-    fn category_supplier(&self) -> fn(&compat::Shared<dyn Builder>, Arc<dyn Fn() -> compat::Shared<dyn ConfigCategory>>) -> compat::Shared<dyn Builder> {
-        <dyn Builder>::category_supplier_body
-    }
-
-    /// java: default Builder categoryIf(boolean condition, @NotNull ConfigCategory category) (dispatch: the body for this class)
-    fn category_if(&self) -> fn(&compat::Shared<dyn Builder>, bool, &compat::Shared<dyn ConfigCategory>) -> compat::Shared<dyn Builder> {
-        <dyn Builder>::category_if_body
-    }
-
-    /// java: default Builder categoryIf(boolean condition, @NotNull Supplier<@NotNull ConfigCategory> categorySupplier) (dispatch: the body for this class)
-    fn category_if_boolean_supplier(&self) -> fn(&compat::Shared<dyn Builder>, bool, Arc<dyn Fn() -> compat::Shared<dyn ConfigCategory>>) -> compat::Shared<dyn Builder> {
-        <dyn Builder>::category_if_boolean_supplier_body
-    }
-
-    /// java: Builder categories(@NotNull Collection<? extends @NotNull ConfigCategory> categories); (dispatch: the body for this class)
-    fn categories(&self) -> fn(&compat::Shared<dyn Builder>, &Vec<compat::Shared<dyn ConfigCategory>>) -> compat::Shared<dyn Builder>;
-
-    /// java: default Builder categories(@NotNull Supplier<@NotNull Collection<? extends @NotNull ConfigCategory>> categoriesSupplier) (dispatch: the body for this class)
-    fn categories_supplier(&self) -> fn(&compat::Shared<dyn Builder>, Arc<dyn Fn() -> Vec<compat::Shared<dyn ConfigCategory>>>) -> compat::Shared<dyn Builder> {
-        <dyn Builder>::categories_supplier_body
-    }
-
-    /// java: default Builder categoriesIf(boolean condition, @NotNull Collection<? extends @NotNull ConfigCategory> categories) (dispatch: the body for this class)
-    fn categories_if(&self) -> fn(&compat::Shared<dyn Builder>, bool, &Vec<compat::Shared<dyn ConfigCategory>>) -> compat::Shared<dyn Builder> {
-        <dyn Builder>::categories_if_body
-    }
-
-    /// java: default Builder categoriesIf(boolean condition, @NotNull Supplier<@NotNull Collection<? extends @NotNull ConfigCategory>> categoriesSupplier) (dispatch: the body for this class)
-    fn categories_if_boolean_supplier(&self) -> fn(&compat::Shared<dyn Builder>, bool, Arc<dyn Fn() -> Vec<compat::Shared<dyn ConfigCategory>>>) -> compat::Shared<dyn Builder> {
-        <dyn Builder>::categories_if_boolean_supplier_body
-    }
-
-    /// java: Builder save(@NotNull Runnable saveFunction); (dispatch: the body for this class)
-    fn save(&self) -> fn(&compat::Shared<dyn Builder>, Arc<dyn Fn()>) -> compat::Shared<dyn Builder>;
-
-    /// java: Builder screenInit(@NotNull Consumer<YACLScreen> initConsumer); (dispatch: the body for this class)
-    fn screen_init(&self) -> fn(&compat::Shared<dyn Builder>, Arc<dyn Fn(compat::Shared<YACLScreen>)>) -> compat::Shared<dyn Builder>;
-
-    /// java: YetAnotherConfigLib build(); (dispatch: the body for this class)
-    fn build(&self) -> fn(&compat::Shared<dyn Builder>) -> compat::Shared<dyn YetAnotherConfigLib>;
-
-}
-
-impl dyn Builder {
     /// java: default Builder category(@NotNull Supplier<@NotNull ConfigCategory> categorySupplier)
-    pub fn category_supplier_body(__this: &compat::Shared<dyn Builder>, category_supplier: Arc<dyn Fn() -> compat::Shared<dyn ConfigCategory>>) -> compat::Shared<dyn Builder> {
-        return ({ let __f = compat::dispatch(__this, |__t| __t.category()); __f(__this, (category_supplier)()) });
+    fn category_supplier(self, category_supplier: impl FnOnce() -> Arc<dyn ConfigCategory>) -> Self {
+        self.category(category_supplier())
     }
 
     /// java: default Builder categoryIf(boolean condition, @NotNull ConfigCategory category)
-    pub fn category_if_body(__this: &compat::Shared<dyn Builder>, mut condition: bool, category: &compat::Shared<dyn ConfigCategory>) -> compat::Shared<dyn Builder> {
-        return (if condition { ({ let __f = compat::dispatch(__this, |__t| __t.category()); __f(__this, category.clone()) }) } else { __this.clone() });
+    fn category_if(self, condition: bool, category: Arc<dyn ConfigCategory>) -> Self {
+        if condition { self.category(category) } else { self }
     }
 
     /// java: default Builder categoryIf(boolean condition, @NotNull Supplier<@NotNull ConfigCategory> categorySupplier)
-    pub fn category_if_boolean_supplier_body(__this: &compat::Shared<dyn Builder>, mut condition: bool, category_supplier: Arc<dyn Fn() -> compat::Shared<dyn ConfigCategory>>) -> compat::Shared<dyn Builder> {
-        return (if condition { ({ let __f = compat::dispatch(__this, |__t| __t.category_supplier()); __f(__this, category_supplier.clone()) }) } else { __this.clone() });
+    fn category_if_boolean_supplier(self, condition: bool, category_supplier: impl FnOnce() -> Arc<dyn ConfigCategory>) -> Self {
+        if condition { self.category_supplier(category_supplier) } else { self }
     }
 
+    /// java: Builder categories(@NotNull Collection<? extends @NotNull ConfigCategory> categories);
+    fn categories(self, categories: Vec<Arc<dyn ConfigCategory>>) -> Self;
+
     /// java: default Builder categories(@NotNull Supplier<@NotNull Collection<? extends @NotNull ConfigCategory>> categoriesSupplier)
-    pub fn categories_supplier_body(__this: &compat::Shared<dyn Builder>, categories_supplier: Arc<dyn Fn() -> Vec<compat::Shared<dyn ConfigCategory>>>) -> compat::Shared<dyn Builder> {
-        return ({ let __f = compat::dispatch(__this, |__t| __t.categories()); __f(__this, &(categories_supplier)()) });
+    fn categories_supplier(self, categories_supplier: impl FnOnce() -> Vec<Arc<dyn ConfigCategory>>) -> Self {
+        self.categories(categories_supplier())
     }
 
     /// java: default Builder categoriesIf(boolean condition, @NotNull Collection<? extends @NotNull ConfigCategory> categories)
-    pub fn categories_if_body(__this: &compat::Shared<dyn Builder>, mut condition: bool, categories: &Vec<compat::Shared<dyn ConfigCategory>>) -> compat::Shared<dyn Builder> {
-        return (if condition { ({ let __f = compat::dispatch(__this, |__t| __t.categories()); __f(__this, categories) }) } else { __this.clone() });
+    fn categories_if(self, condition: bool, categories: Vec<Arc<dyn ConfigCategory>>) -> Self {
+        if condition { self.categories(categories) } else { self }
     }
 
-    /// java: default Builder categoriesIf(boolean condition, @NotNull Supplier<@NotNull Collection<? extends @NotNull ConfigCategory>> categoriesSupplier)
-    pub fn categories_if_boolean_supplier_body(__this: &compat::Shared<dyn Builder>, mut condition: bool, categories_supplier: Arc<dyn Fn() -> Vec<compat::Shared<dyn ConfigCategory>>>) -> compat::Shared<dyn Builder> {
-        return (if condition { ({ let __f = compat::dispatch(__this, |__t| __t.categories_supplier()); __f(__this, categories_supplier.clone()) }) } else { __this.clone() });
+    /// java: default Builder categoriesIf(boolean condition, @NotNull Supplier<@NotNull Collection<..>> categoriesSupplier)
+    fn categories_if_boolean_supplier(self, condition: bool, categories_supplier: impl FnOnce() -> Vec<Arc<dyn ConfigCategory>>) -> Self {
+        if condition { self.categories_supplier(categories_supplier) } else { self }
     }
 
+    /// java: Builder save(@NotNull Runnable saveFunction);
+    fn save(self, save_function: impl Fn() + 'static) -> Self;
+
+    /// java: Builder screenInit(@NotNull Consumer<YACLScreen> initConsumer);
+    fn screen_init(self, init_consumer: impl Fn(&Arc<YACLScreen>) + 'static) -> Self;
+
+    /// java: YetAnotherConfigLib build();
+    fn build(self) -> Arc<dyn YetAnotherConfigLib>;
 }
 
-/// java: @FunctionalInterface interface ConfigBackedBuilder<T>
-pub trait ConfigBackedBuilder<T: Clone + 'static> {
-    fn as_any(&self) -> &dyn std::any::Any;
+/// java: @FunctionalInterface interface ConfigBackedBuilder<T> (any `Fn(T, T, Builder) -> Builder` is one)
+pub trait ConfigBackedBuilder<T> {
     /// java: YetAnotherConfigLib.Builder build(T defaults, T config, YetAnotherConfigLib.Builder builder);
-    fn build(&self, defaults: &T, config: &T, builder: &compat::Shared<dyn Builder>) -> compat::Shared<dyn Builder>;
+    fn build(&self, defaults: T, config: T, builder: BuilderImpl) -> BuilderImpl;
+}
 
+impl<T, F: Fn(T, T, BuilderImpl) -> BuilderImpl> ConfigBackedBuilder<T> for F {
+    fn build(&self, defaults: T, config: T, builder: BuilderImpl) -> BuilderImpl {
+        self(defaults, config, builder)
+    }
 }

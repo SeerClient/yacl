@@ -7,50 +7,49 @@ use crate::dev::isxander::yacl3::config::v2::api::field_access::FieldAccess;
 use crate::dev::isxander::yacl3::config::v2::api::read_only_field_access::ReadOnlyFieldAccess;
 
 /// java: public record FieldBackedBinding<T>(FieldAccess<T> field, ReadOnlyFieldAccess<T> defaultField) implements Binding<T>
-#[derive(Clone, Debug)]
-pub struct FieldBackedBinding<T> {
+pub struct FieldBackedBinding<T: 'static> {
     /// java: FieldAccess<T> field
-    pub field: compat::Shared<dyn FieldAccess<T>>,
+    pub field: Arc<dyn FieldAccess<T>>,
     /// java: ReadOnlyFieldAccess<T> defaultField
-    pub default_field: compat::Shared<dyn ReadOnlyFieldAccess<T>>,
+    pub default_field: Arc<dyn ReadOnlyFieldAccess<T>>,
+}
+
+impl<T: 'static> Clone for FieldBackedBinding<T> {
+    fn clone(&self) -> Self {
+        Self { field: self.field.clone(), default_field: self.default_field.clone() }
+    }
 }
 
 impl<T: Clone + 'static> FieldBackedBinding<T> {
     /// java: the canonical record constructor
-    pub fn new(mut field: compat::Shared<dyn FieldAccess<T>>, mut default_field: compat::Shared<dyn ReadOnlyFieldAccess<T>>) -> Self {
+    pub fn new(field: Arc<dyn FieldAccess<T>>, default_field: Arc<dyn ReadOnlyFieldAccess<T>>) -> Self {
         Self { field, default_field }
     }
 
     /// java: the record accessor `field()`
-    pub fn field(&self) -> compat::Shared<dyn FieldAccess<T>> {
+    pub fn field(&self) -> Arc<dyn FieldAccess<T>> {
         self.field.clone()
     }
 
     /// java: the record accessor `defaultField()`
-    pub fn default_field(&self) -> compat::Shared<dyn ReadOnlyFieldAccess<T>> {
+    pub fn default_field(&self) -> Arc<dyn ReadOnlyFieldAccess<T>> {
         self.default_field.clone()
     }
-
 }
 
 impl<T: Clone + 'static> Binding<T> for FieldBackedBinding<T> {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+    /// java: @Override public void setValue(T value)
+    fn set_value(&self, value: T) {
+        self.field.set(value);
     }
 
     /// java: @Override public T getValue()
     fn get_value(&self) -> T {
-        return self.field.lock().borrow().get();
-    }
-
-    /// java: @Override public void setValue(T value)
-    fn set_value(&mut self, mut value: T) {
-        { let (__a0,) = (value.clone(),); self.field.lock().borrow_mut().set(__a0) };
+        self.field.get()
     }
 
     /// java: @Override public T defaultValue()
     fn default_value(&self) -> T {
-        return self.default_field.lock().borrow().get();
+        self.default_field.get()
     }
-
 }

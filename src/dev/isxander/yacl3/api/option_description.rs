@@ -1,85 +1,87 @@
-//! Ported from dev.isxander.yacl3.api.OptionDescription by fabric2seer.
+//! Ported from dev.isxander.yacl3.api.OptionDescription.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::gui::image::image_renderer::ImageRenderer;
-use crate::dev::isxander::yacl3::r#impl::option_description_impl::BuilderImpl;
-use crate::dev::isxander::yacl3::r#impl::option_description_impl::OptionDescriptionImpl;
-use mcrust::java::util::concurrent::completable_future::CompletableFuture;
+use crate::dev::isxander::yacl3::r#impl::option_description_impl::{BuilderImpl, OptionDescriptionImpl};
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
 use mcrust::net::minecraft::resources::identifier::Identifier;
 
+/// `CompletableFuture<Optional<ImageRenderer>>`: completed on the render thread (the image objects are not `Send`).
+pub type ImageFuture = compat::LocalFuture<Option<Arc<dyn ImageRenderer>>>;
+
+thread_local! {
+    static EMPTY: Arc<dyn OptionDescription> = Arc::new(OptionDescriptionImpl::new(
+        // CommonComponents.EMPTY = Component.empty()
+        mcrust::net::minecraft::network::chat::component::empty(),
+        compat::LocalFuture::completed_future(None),
+    ));
+}
+
 /// java: OptionDescription EMPTY = new OptionDescriptionImpl(CommonComponents.EMPTY, CompletableFuture.completedFuture(Optional.empty()));
-pub static EMPTY: compat::MainThread<compat::Shared<dyn OptionDescription>> = compat::MainThread::new(|| (compat::shared(OptionDescriptionImpl::new(mcrust::net::minecraft::network::chat::common_components::empty(), CompletableFuture::completed_future(None))) as compat::Shared<dyn OptionDescription>));
+/// One object (it is compared by identity where a hovered description is remembered).
+#[allow(non_snake_case)]
+pub fn EMPTY() -> Arc<dyn OptionDescription> {
+    EMPTY.with(|d| d.clone())
+}
 
 /// java: public interface OptionDescription
 pub trait OptionDescription: compat::DynAny {
-    fn as_any(&self) -> &dyn std::any::Any;
-    /// java: Component text(); (dispatch: the body for this class)
-    fn text(&self) -> fn(&compat::Shared<dyn OptionDescription>) -> MutableComponent;
+    /// java: Component text();
+    fn text(&self) -> MutableComponent;
 
-    /// java: CompletableFuture<Optional<ImageRenderer>> image(); (dispatch: the body for this class)
-    fn image(&self) -> fn(&compat::Shared<dyn OptionDescription>) -> mcrust::java::util::concurrent::completable_future::CompletableFuture<Option<compat::Shared<dyn ImageRenderer>>>;
-
+    /// java: CompletableFuture<Optional<ImageRenderer>> image();
+    fn image(&self) -> ImageFuture;
 }
 
 /// java: static Builder createBuilder()
-pub fn create_builder() -> compat::Shared<dyn Builder> {
-    return (BuilderImpl::new() as compat::Shared<dyn Builder>);
+pub fn create_builder() -> BuilderImpl {
+    BuilderImpl::new()
 }
 
 /// java: static OptionDescription of(Component... description)
-pub fn of(description: &Vec<MutableComponent>) -> compat::Shared<dyn OptionDescription> {
-    return ({ let __r = &({ let __r = &create_builder(); let __f = compat::dispatch(__r, |__t| __t.text()); __f(__r, description) }); let __f = compat::dispatch(__r, |__t| __t.build()); __f(__r) });
+pub fn of(description: Vec<MutableComponent>) -> Arc<dyn OptionDescription> {
+    create_builder().text(description).build()
 }
 
-/// java: interface Builder
-pub trait Builder: compat::DynAny {
-    fn as_any(&self) -> &dyn std::any::Any;
-    /// java: Builder text(Component... description); (dispatch: the body for this class)
-    fn text(&self) -> fn(&compat::Shared<dyn Builder>, &Vec<MutableComponent>) -> compat::Shared<dyn Builder>;
+/// java: interface Builder (setters by value, Java's `return this`)
+pub trait Builder: Sized {
+    /// java: Builder text(Component... description);
+    fn text(self, description: Vec<MutableComponent>) -> Self;
 
-    /// java: Builder text(Collection<? extends Component> lines); (dispatch: the body for this class)
-    fn text_collection(&self) -> fn(&compat::Shared<dyn Builder>, &Vec<MutableComponent>) -> compat::Shared<dyn Builder>;
+    /// java: Builder text(Collection<? extends Component> lines);
+    fn text_collection(self, lines: Vec<MutableComponent>) -> Self;
 
-    /// java: Builder image(Identifier image, int width, int height); (dispatch: the body for this class)
-    fn image(&self) -> fn(&compat::Shared<dyn Builder>, &Identifier, i32, i32) -> compat::Shared<dyn Builder>;
+    /// java: Builder image(Identifier image, int width, int height);
+    fn image(self, image: Identifier, width: i32, height: i32) -> Self;
 
-    /// java: Builder image(Identifier image, float u, float v, int width, int height, int textureWidth, int textureHeight); (dispatch: the body for this class)
-    fn image_7(&self) -> fn(&compat::Shared<dyn Builder>, &Identifier, f32, f32, i32, i32, i32, i32) -> compat::Shared<dyn Builder>;
+    /// java: Builder image(Identifier image, float u, float v, int width, int height, int textureWidth, int textureHeight);
+    #[allow(clippy::too_many_arguments)]
+    fn image_7(self, image: Identifier, u: f32, v: f32, width: i32, height: i32, texture_width: i32, texture_height: i32) -> Self;
 
-    /// java: Builder image(Path path, Identifier uniqueLocation); (dispatch: the body for this class)
-    fn image_2(&self) -> fn(&compat::Shared<dyn Builder>, &std::path::PathBuf, &Identifier) -> compat::Shared<dyn Builder>;
+    /// java: Builder image(Path path, Identifier uniqueLocation);
+    fn image_2(self, path: std::path::PathBuf, unique_location: Identifier) -> Self;
 
-    /// java: Builder webpImage(Identifier image); (dispatch: the body for this class)
-    fn webp_image(&self) -> fn(&compat::Shared<dyn Builder>, &Identifier) -> compat::Shared<dyn Builder>;
+    /// java: Builder webpImage(Identifier image);
+    fn webp_image(self, image: Identifier) -> Self;
 
-    /// java: Builder webpImage(Path path, Identifier uniqueLocation); (dispatch: the body for this class)
-    fn webp_image_2(&self) -> fn(&compat::Shared<dyn Builder>, &std::path::PathBuf, &Identifier) -> compat::Shared<dyn Builder>;
+    /// java: Builder webpImage(Path path, Identifier uniqueLocation);
+    fn webp_image_2(self, path: std::path::PathBuf, unique_location: Identifier) -> Self;
 
-    /// java: Builder customImage(CompletableFuture<Optional<ImageRenderer>> image); (dispatch: the body for this class)
-    fn custom_image(&self) -> fn(&compat::Shared<dyn Builder>, mcrust::java::util::concurrent::completable_future::CompletableFuture<Option<compat::Shared<dyn ImageRenderer>>>) -> compat::Shared<dyn Builder>;
+    /// java: Builder customImage(CompletableFuture<Optional<ImageRenderer>> image);
+    fn custom_image(self, image: ImageFuture) -> Self;
 
-    /// java: default Builder customImage(ImageRenderer image) (dispatch: the body for this class)
-    fn custom_image_image_renderer(&self) -> fn(&compat::Shared<dyn Builder>, &compat::Shared<dyn ImageRenderer>) -> compat::Shared<dyn Builder> {
-        <dyn Builder>::custom_image_image_renderer_body
-    }
-
-    /// java: @Deprecated Builder gifImage(Identifier image); (dispatch: the body for this class)
-    fn gif_image(&self) -> fn(&compat::Shared<dyn Builder>, &Identifier) -> compat::Shared<dyn Builder>;
-
-    /// java: @Deprecated Builder gifImage(Path path, Identifier uniqueLocation); (dispatch: the body for this class)
-    fn gif_image_2(&self) -> fn(&compat::Shared<dyn Builder>, &std::path::PathBuf, &Identifier) -> compat::Shared<dyn Builder>;
-
-    /// java: OptionDescription build(); (dispatch: the body for this class)
-    fn build(&self) -> fn(&compat::Shared<dyn Builder>) -> compat::Shared<dyn OptionDescription>;
-
-}
-
-impl dyn Builder {
     /// java: default Builder customImage(ImageRenderer image)
-    pub fn custom_image_image_renderer_body(__this: &compat::Shared<dyn Builder>, image: &compat::Shared<dyn ImageRenderer>) -> compat::Shared<dyn Builder> {
-        return ({ let __f = compat::dispatch(__this, |__t| __t.custom_image()); __f(__this, CompletableFuture::completed_future(Some(image.clone()))) });
+    fn custom_image_image_renderer(self, image: Arc<dyn ImageRenderer>) -> Self {
+        self.custom_image(compat::LocalFuture::completed_future(Some(image)))
     }
 
+    /// java: @Deprecated Builder gifImage(Identifier image);
+    fn gif_image(self, image: Identifier) -> Self;
+
+    /// java: @Deprecated Builder gifImage(Path path, Identifier uniqueLocation);
+    fn gif_image_2(self, path: std::path::PathBuf, unique_location: Identifier) -> Self;
+
+    /// java: OptionDescription build();
+    fn build(self) -> Arc<dyn OptionDescription>;
 }

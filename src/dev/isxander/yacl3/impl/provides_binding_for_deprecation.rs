@@ -1,13 +1,14 @@
-//! Ported from dev.isxander.yacl3.impl.ProvidesBindingForDeprecation by fabric2seer.
+//! Ported from dev.isxander.yacl3.impl.ProvidesBindingForDeprecation.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::binding::Binding;
 
 /// java: public interface ProvidesBindingForDeprecation<T>
+///
+/// `stateManager instanceof ProvidesBindingForDeprecation` (OptionImpl.binding, ListOptionImpl.binding) is
+/// `StateManager::get_binding_for_deprecation`, which the two state managers that implement this answer.
 pub trait ProvidesBindingForDeprecation<T: Clone + 'static> {
-    fn as_any(&self) -> &dyn std::any::Any;
     /// java: Binding<T> getBinding();
-    fn get_binding(&self) -> compat::Shared<dyn Binding<T>>;
-
+    fn get_binding(&self) -> Arc<dyn Binding<T>>;
 }

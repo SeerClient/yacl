@@ -1,250 +1,212 @@
-//! Ported from dev.isxander.yacl3.impl.ListOptionEntryImpl by fabric2seer.
+//! Ported from dev.isxander.yacl3.impl.ListOptionEntryImpl.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::binding::Binding;
 use crate::dev::isxander::yacl3::api::controller::Controller;
 use crate::dev::isxander::yacl3::api::list_option::ListOption;
-use crate::dev::isxander::yacl3::api::list_option_entry::ListOptionEntry;
+use crate::dev::isxander::yacl3::api::list_option_entry::{self, ListOptionEntry};
+use crate::dev::isxander::yacl3::api::option::{AnyOption, Option as YOption};
 use crate::dev::isxander::yacl3::api::option_description::OptionDescription;
-use crate::dev::isxander::yacl3::api::option_event_listener::OptionEventListener;
+use crate::dev::isxander::yacl3::api::option_event_listener::{Event, OptionEventListener};
 use crate::dev::isxander::yacl3::api::option_flag::OptionFlag;
+use crate::dev::isxander::yacl3::api::option_group::OptionGroup;
 use crate::dev::isxander::yacl3::api::state_manager::StateManager;
 use crate::dev::isxander::yacl3::api::utils::dimension::Dimension;
 use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget;
 use crate::dev::isxander::yacl3::gui::controllers::list_entry_widget::ListEntryWidget;
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
 use crate::dev::isxander::yacl3::r#impl::hidden_name_list_option_entry::HiddenNameListOptionEntry;
-use crate::dev::isxander::yacl3::r#impl::list_option_impl::ListOptionImpl;
+use crate::dev::isxander::yacl3::r#impl::list_option_impl::{EntryControllerFunction, ListOptionImpl};
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
-use crate::dev::isxander::yacl3::api::option::Option as _;
+use std::cell::RefCell;
+use std::sync::Weak;
 
 /// java: @ApiStatus.Internal public final class ListOptionEntryImpl<T> implements ListOptionEntry<T>
-#[derive(Clone)]
-pub struct ListOptionEntryImpl<T> {
-    /// java: private final ListOptionImpl<T> group;
-    pub group: compat::Shared<ListOptionImpl<T>>,
+pub struct ListOptionEntryImpl<T: Clone + PartialEq + 'static> {
+    /// java: private final ListOptionImpl<T> group; (the entry's parent - held weakly, the group holds the entry)
+    pub group: Weak<ListOptionImpl<T>>,
     /// java: private T value;
-    pub value: T,
+    pub value: RefCell<T>,
     /// java: private final Binding<T> binding;
-    pub binding: compat::Shared<dyn Binding<T>>,
+    pub binding: Arc<dyn Binding<T>>,
     /// java: private final Controller<T> controller;
-    pub controller: Option<compat::Shared<dyn Controller<T>>>,
-    /// the object's own shared handle: Java's `this` handed to other objects
-    pub self_ref: compat::WeakShared<Self>,
+    pub controller: Arc<dyn Controller<T>>,
 }
 
-impl<T: Clone + 'static> ListOptionEntryImpl<T> {
+impl<T: Clone + PartialEq + 'static> ListOptionEntryImpl<T> {
     /// java: ListOptionEntryImpl(ListOptionImpl<T> group, T initialValue, @NotNull Function<ListOptionEntry<T>, Controller<T>> controlGetter)
-    pub fn new(mut group: compat::Shared<ListOptionImpl<T>>, mut initial_value: T, control_getter: Arc<dyn Fn(compat::Shared<dyn ListOptionEntry<T>>) -> compat::Shared<dyn Controller<T>>>) -> compat::Shared<Self> {
-        let __init_group = group.clone();
-        let __init_value = initial_value.clone();
-        let __init_binding = (compat::shared(EntryBinding::new()) as compat::Shared<dyn Binding<compat::Object>>);
-        let __this = compat::shared(Self {
-            self_ref: std::sync::Weak::new(),
-            group: __init_group,
-            value: __init_value,
-            binding: __init_binding,
-            controller: None,
-        });
-        compat::write(&__this, |__t| __t.self_ref = std::sync::Arc::downgrade(&__this));
-        { let __v = Some((compat::shared(EntryController::new((control_getter)(HiddenNameListOptionEntry::new((__this.clone() as compat::Shared<dyn ListOptionEntry<compat::Object>>))), __this.clone())) as compat::Shared<dyn Controller<compat::Object>>)); compat::write(&__this, |__t| __t.controller = __v); }
-        __this
+    pub fn new(group: Weak<ListOptionImpl<T>>, initial_value: T, control_getter: EntryControllerFunction<T>) -> Arc<ListOptionEntryImpl<T>> {
+        Arc::new_cyclic(|this: &Weak<ListOptionEntryImpl<T>>| {
+            // java: this.binding = new EntryBinding();
+            let binding: Arc<dyn Binding<T>> = Arc::new(EntryBinding { entry: this.clone() });
+            // java: this.controller = new EntryController<>(controlGetter.apply(new HiddenNameListOptionEntry<>(this)), this);
+            let this_entry: Weak<dyn ListOptionEntry<T>> = this.clone();
+            let hidden: Arc<dyn ListOptionEntry<T>> = Arc::new(HiddenNameListOptionEntry::new(this_entry));
+            let controller: Arc<dyn Controller<T>> = Arc::new(EntryController { controller: control_getter(hidden), entry: this.clone() });
+            ListOptionEntryImpl { group, value: RefCell::new(initial_value), binding, controller }
+        })
     }
 
+    fn group(&self) -> Arc<ListOptionImpl<T>> {
+        self.group.upgrade().expect("a list option entry outlived its list option")
+    }
 }
 
-impl<T: Clone + 'static> ListOptionEntry<T> for ListOptionEntryImpl<T> {
-    /// java: @Override public ListOption<T> parentGroup()
-    fn parent_group(&self) -> compat::Shared<dyn ListOption<T>> {
-        return (self.group.clone() as compat::Shared<dyn ListOption<compat::Object>>);
-    }
-
-}
-
-impl<T: Clone + 'static> crate::dev::isxander::yacl3::api::option::Option<compat::Object> for ListOptionEntryImpl<T> {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
+impl<T: Clone + PartialEq + 'static> AnyOption for ListOptionEntryImpl<T> {
     /// java: @Override public @NotNull Component name()
     fn name(&self) -> MutableComponent {
-        return self.group.lock().borrow().name();
+        OptionGroup::name(&*self.group())
     }
 
     /// java: @Override public @NotNull OptionDescription description()
-    fn description(&self) -> compat::Shared<dyn OptionDescription> {
-        return self.group.lock().borrow().description();
+    fn description(&self) -> Arc<dyn OptionDescription> {
+        OptionGroup::description(&*self.group())
     }
 
     /// java: @Override public @NotNull Component tooltip()
     fn tooltip(&self) -> MutableComponent {
-        return self.group.lock().borrow().tooltip();
-    }
-
-    /// java: @Override public @NotNull Controller<T> controller()
-    fn controller(&self) -> compat::Shared<dyn Controller<T>> {
-        return self.controller.clone().unwrap();
-    }
-
-    /// java: @Override public @NotNull StateManager<T> stateManager()
-    fn state_manager(&self) -> compat::Shared<dyn StateManager<T>> {
-        panic!("UnsupportedOperationException: {}", "ListOptionEntryImpl does not support state managers");
-    }
-
-    /// java: @Override public @NotNull Binding<T> binding()
-    fn binding(&self) -> compat::Shared<dyn Binding<T>> {
-        return self.binding.clone();
+        OptionGroup::tooltip(&*self.group())
     }
 
     /// java: @Override public boolean available()
     fn available(&self) -> bool {
-        return self.parent_group().lock().borrow().available();
+        list_option_entry::parent_available(self)
     }
 
     /// java: @Override public void setAvailable(boolean available)
-    fn set_available(&mut self, mut available: bool) {
+    fn set_available(&self, _available: bool) {}
+
+    /// java: ListOptionEntry.flags() - `parentGroup().flags()`
+    fn flags(&self) -> Vec<Arc<dyn OptionFlag>> {
+        list_option_entry::parent_flags(self)
     }
 
     /// java: @Override public boolean changed()
     fn changed(&self) -> bool {
-        return false;
-    }
-
-    /// java: @Override public @NotNull T pendingValue()
-    fn pending_value(&self) -> T {
-        return self.value.clone();
-    }
-
-    /// java: @Override public void requestSet(@NotNull T value)
-    fn request_set(&mut self, mut value: T) {
-        { let (__a0,) = (value.clone(),); self.binding.lock().borrow_mut().set_value(__a0) };
+        false
     }
 
     /// java: @Override public boolean applyValue()
     fn apply_value(&self) -> bool {
-        return false;
+        false
     }
 
     /// java: @Override public void forgetPendingValue()
-    fn forget_pending_value(&mut self) {
-    }
+    fn forget_pending_value(&self) {}
 
     /// java: @Override public void requestSetDefault()
-    fn request_set_default(&mut self) {
-    }
+    fn request_set_default(&self) {}
 
     /// java: @Override public boolean isPendingValueDefault()
     fn is_pending_value_default(&self) -> bool {
-        return false;
+        false
     }
 
     /// java: @Override public boolean canResetToDefault()
     fn can_reset_to_default(&self) -> bool {
-        return false;
+        false
     }
 
-    /// java: @Override public void addEventListener(OptionEventListener<T> listener)
-    fn add_event_listener(&mut self, mut listener: compat::Shared<dyn OptionEventListener<T>>) {
+    fn provide_controller_widget(&self, screen: &Arc<YACLScreen>, widget_dimension: Arc<dyn Dimension<i32>>) -> Arc<dyn AbstractWidget> {
+        self.controller().provide_widget(screen, widget_dimension)
     }
 
-    /// java: @Override public void addListener(BiConsumer<Option<T>, T> changedListener)
-    fn add_listener(&mut self, changed_listener: Arc<dyn Fn(compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<T>>, T)>) {
-    }
+    /// java: @Override public void addEventListener(..) - empty
+    fn add_any_event_listener(&self, _listener: Arc<dyn Fn(&dyn AnyOption, Event)>) {}
 
-    /// java: @Override default @NotNull ImmutableSet<OptionFlag> flags()
-    fn flags(&self) -> std::collections::HashSet<compat::Shared<dyn OptionFlag>> {
-        return self.parent_group().lock().borrow().flags();
-    }
-
+    /// java: @Override public void addListener(..) - empty
+    fn add_any_listener(&self, _changed_listener: Arc<dyn Fn(&dyn AnyOption)>) {}
 }
 
-/// java: @ApiStatus.Internal public record EntryController<T>(Controller<T> controller, ListOptionEntryImpl<T> entry) implements Controller<T>
-#[derive(Clone, Debug)]
-pub struct EntryController<T> {
-    /// java: Controller<T> controller
-    pub controller: compat::Shared<dyn Controller<T>>,
-    /// java: ListOptionEntryImpl<T> entry
-    pub entry: compat::Shared<ListOptionEntryImpl<T>>,
-}
-
-impl<T: Clone + 'static> EntryController<T> {
-    /// java: the canonical record constructor
-    pub fn new(mut controller: compat::Shared<dyn Controller<T>>, mut entry: compat::Shared<ListOptionEntryImpl<T>>) -> Self {
-        Self { controller, entry }
-    }
-
-    /// java: the record accessor `controller()`
-    pub fn controller(&self) -> compat::Shared<dyn Controller<T>> {
+impl<T: Clone + PartialEq + 'static> YOption<T> for ListOptionEntryImpl<T> {
+    /// java: @Override public @NotNull Controller<T> controller()
+    fn controller(&self) -> Arc<dyn Controller<T>> {
         self.controller.clone()
     }
 
-    /// java: the record accessor `entry()`
-    pub fn entry(&self) -> compat::Shared<ListOptionEntryImpl<T>> {
-        self.entry.clone()
+    /// java: @Override public @NotNull StateManager<T> stateManager()
+    fn state_manager(&self) -> Arc<dyn StateManager<T>> {
+        panic!("UnsupportedOperationException: ListOptionEntryImpl does not support state managers");
     }
 
+    /// java: @Override public @NotNull Binding<T> binding()
+    fn binding(&self) -> Arc<dyn Binding<T>> {
+        self.binding.clone()
+    }
+
+    /// java: @Override public @NotNull T pendingValue()
+    fn pending_value(&self) -> T {
+        self.value.borrow().clone()
+    }
+
+    /// java: @Override public void requestSet(@NotNull T value)
+    fn request_set(&self, value: T) {
+        self.binding.set_value(value);
+    }
+
+    /// java: @Override public void addEventListener(OptionEventListener<T> listener) - empty
+    fn add_event_listener(&self, _listener: Arc<dyn OptionEventListener<T>>) {}
+
+    /// java: @Override public void addListener(BiConsumer<Option<T>, T> changedListener) - empty
+    fn add_listener(&self, _changed_listener: Arc<dyn Fn(&dyn YOption<T>, T)>) {}
 }
 
-impl<T: Clone + 'static> Controller<T> for EntryController<T> {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+impl<T: Clone + PartialEq + 'static> ListOptionEntry<T> for ListOptionEntryImpl<T> {
+    /// java: @Override public ListOption<T> parentGroup()
+    fn parent_group(&self) -> Arc<dyn ListOption<T>> {
+        self.group()
     }
+}
 
+/// java: @ApiStatus.Internal public record EntryController<T>(Controller<T> controller, ListOptionEntryImpl<T> entry) implements Controller<T>
+pub struct EntryController<T: Clone + PartialEq + 'static> {
+    pub controller: Arc<dyn Controller<T>>,
+    /// the entry (held weakly: the entry holds this controller)
+    pub entry: Weak<ListOptionEntryImpl<T>>,
+}
+
+impl<T: Clone + PartialEq + 'static> Controller<T> for EntryController<T> {
     /// java: @Override public Option<T> option()
-    fn option(&self) -> compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<T>> {
-        return self.controller.lock().borrow().option();
+    fn option(&self) -> Arc<dyn YOption<T>> {
+        self.controller.option()
     }
 
     /// java: @Override public Component formatValue()
     fn format_value(&self) -> MutableComponent {
-        return self.controller.lock().borrow().format_value();
+        self.controller.format_value()
     }
 
     /// java: @Override public AbstractWidget provideWidget(YACLScreen screen, Dimension<Integer> widgetDimension)
-    fn provide_widget(&self, screen: &compat::Shared<YACLScreen>, widget_dimension: &compat::Shared<dyn Dimension<i32>>) -> compat::Shared<dyn AbstractWidget> {
-        return (ListEntryWidget::new(screen.clone(), (self.entry.clone() as compat::Shared<dyn ListOptionEntry<compat::Object>>), self.controller.lock().borrow().provide_widget(screen, widget_dimension)) as compat::Shared<dyn AbstractWidget>);
+    fn provide_widget(self: Arc<Self>, screen: &Arc<YACLScreen>, widget_dimension: Arc<dyn Dimension<i32>>) -> Arc<dyn AbstractWidget> {
+        let entry: Arc<dyn ListOptionEntry<T>> = self.entry.upgrade().expect("a list entry's controller outlived the entry");
+        let entry_widget = self.controller.clone().provide_widget(screen, widget_dimension);
+        ListEntryWidget::new(screen, entry, entry_widget)
     }
-
 }
 
 /// java: private class EntryBinding implements Binding<T>
-#[derive(Clone)]
-pub struct EntryBinding {}
-
-impl EntryBinding {
-    /// java: the implicit no-argument constructor
-    pub fn new() -> Self {
-        let mut this = Self {
-        };
-        this
-    }
-
+pub struct EntryBinding<T: Clone + PartialEq + 'static> {
+    entry: Weak<ListOptionEntryImpl<T>>,
 }
 
-impl Binding<T> for EntryBinding {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
+impl<T: Clone + PartialEq + 'static> Binding<T> for EntryBinding<T> {
     /// java: @Override public void setValue(T newValue)
-    fn set_value(&mut self, mut new_value: T) {
-        // TODO(fabric2seer): `value` is a field of the enclosing instance (ListOptionEntryImpl.this) - an inner class has no outer reference in Rust
-        //   java: value = newValue;
-        // TODO(fabric2seer): `group` is a field of the enclosing instance (ListOptionEntryImpl.this) - an inner class has no outer reference in Rust
-        //   java: group.triggerListener(OptionEventListener.Event.OTHER, true);
+    fn set_value(&self, new_value: T) {
+        let entry = self.entry.upgrade().expect("a list entry's binding outlived the entry");
+        *entry.value.borrow_mut() = new_value;
+        entry.group().trigger_listener(Event::Other, true);
     }
 
     /// java: @Override public T getValue()
     fn get_value(&self) -> T {
-        // TODO(fabric2seer): `value` is a field of the enclosing instance (ListOptionEntryImpl.this) - an inner class has no outer reference in Rust
-        //   java: return value;
-        todo!("fabric2seer: the value of this function is in a TODO above")
+        let entry = self.entry.upgrade().expect("a list entry's binding outlived the entry");
+        let value = entry.value.borrow().clone();
+        value
     }
 
     /// java: @Override public T defaultValue()
     fn default_value(&self) -> T {
         panic!("UnsupportedOperationException");
     }
-
 }

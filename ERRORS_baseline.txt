@@ -1,0 +1,408 @@
+src\prelude.rs:84:64: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::custom_image`: could not find `custom_image` in `autogen`
+src\prelude.rs:85:64: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::enum_cycler`: could not find `enum_cycler` in `autogen`
+src\prelude.rs:86:64: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::list_group`: could not find `list_group` in `autogen`
+src\prelude.rs:87:64: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::list_group`: could not find `list_group` in `autogen`
+src\dev\isxander\yacl3\config\v2\api\autogen\simple_option_factory.rs:9:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::custom_description`: could not find `custom_description` in `autogen`
+src\dev\isxander\yacl3\config\v2\api\autogen\simple_option_factory.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::custom_image`: could not find `custom_image` in `autogen`
+src\dev\isxander\yacl3\config\v2\api\autogen\simple_option_factory.rs:11:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::custom_image`: could not find `custom_image` in `autogen`
+src\dev\isxander\yacl3\config\v2\api\autogen\simple_option_factory.rs:12:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::custom_name`: could not find `custom_name` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\auto_gen_utils.rs:8:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::custom_format`: could not find `custom_format` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\auto_gen_utils.rs:9:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::format_translation`: could not find `format_translation` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\color_field_impl.rs:11:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::color_field`: could not find `color_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_field_impl.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::double_field`: could not find `double_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_slider_impl.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::double_slider`: could not find `double_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\dropdown_impl.rs:11:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::dropdown`: could not find `dropdown` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\empty_custom_image_factory.rs:5:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::custom_image`: could not find `custom_image` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\enum_cycler_impl.rs:11:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::enum_cycler`: could not find `enum_cycler` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\enum_cycler_impl.rs:12:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::enum_cycler`: could not find `enum_cycler` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_field_impl.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::float_field`: could not find `float_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_slider_impl.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::float_slider`: could not find `float_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_field_impl.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::int_field`: could not find `int_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_slider_impl.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::int_slider`: could not find `int_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\item_field_impl.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::item_field`: could not find `item_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\label_impl.rs:6:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::label`: could not find `label` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\list_group_impl.rs:11:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::list_group`: could not find `list_group` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\list_group_impl.rs:12:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::list_group`: could not find `list_group` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\list_group_impl.rs:13:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::list_group`: could not find `list_group` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_field_impl.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::long_field`: could not find `long_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_slider_impl.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::long_slider`: could not find `long_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\master_tick_box_impl.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::master_tick_box`: could not find `master_tick_box` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:5:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::color_field`: could not find `color_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:6:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::double_field`: could not find `double_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:7:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::double_slider`: could not find `double_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:8:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::dropdown`: could not find `dropdown` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:9:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::enum_cycler`: could not find `enum_cycler` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:10:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::float_field`: could not find `float_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:11:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::float_slider`: could not find `float_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:12:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::int_field`: could not find `int_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:13:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::int_slider`: could not find `int_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:14:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::item_field`: could not find `item_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:15:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::label`: could not find `label` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:16:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::list_group`: could not find `list_group` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:17:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::long_field`: could not find `long_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:18:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::long_slider`: could not find `long_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:19:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::master_tick_box`: could not find `master_tick_box` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:22:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::string_field`: could not find `string_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\option_factory_registry.rs:23:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::tick_box`: could not find `tick_box` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\string_field_impl.rs:14:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::string_field`: could not find `string_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\tick_box_impl.rs:14:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::tick_box`: could not find `tick_box` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\config_class_handler_impl.rs:19:51: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::serial_entry`: could not find `serial_entry` in `api`
+src\dev\isxander\yacl3\config\v2\impl\config_field_impl.rs:5:60: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::autogen::auto_gen`: could not find `auto_gen` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\config_field_impl.rs:9:51: error[E0432]: unresolved import `crate::dev::isxander::yacl3::config::v2::api::serial_entry`: could not find `serial_entry` in `api`
+src\dev\isxander\yacl3\config\gson_config_instance.rs:89:27: error[E0403]: the name `T` is already used for a generic parameter in this item's generic parameters: already used
+src\dev\isxander\yacl3\config\v2\impl\autogen\color_field_impl.rs:54:81: error[E0433]: cannot find `color_field` in `autogen`: could not find `color_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\color_field_impl.rs:55:125: error[E0433]: cannot find `color_field` in `autogen`: could not find `color_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\color_field_impl.rs:58:137: error[E0433]: cannot find `color_field` in `autogen`: could not find `color_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_field_impl.rs:55:81: error[E0433]: cannot find `double_field` in `autogen`: could not find `double_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_field_impl.rs:56:125: error[E0433]: cannot find `double_field` in `autogen`: could not find `double_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_field_impl.rs:59:137: error[E0433]: cannot find `double_field` in `autogen`: could not find `double_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_slider_impl.rs:55:81: error[E0433]: cannot find `double_slider` in `autogen`: could not find `double_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_slider_impl.rs:56:125: error[E0433]: cannot find `double_slider` in `autogen`: could not find `double_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_slider_impl.rs:59:137: error[E0433]: cannot find `double_slider` in `autogen`: could not find `double_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\dropdown_impl.rs:53:81: error[E0433]: cannot find `dropdown` in `autogen`: could not find `dropdown` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\dropdown_impl.rs:54:125: error[E0433]: cannot find `dropdown` in `autogen`: could not find `dropdown` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\dropdown_impl.rs:57:137: error[E0433]: cannot find `dropdown` in `autogen`: could not find `dropdown` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\enum_cycler_impl.rs:57:81: error[E0433]: cannot find `enum_cycler` in `autogen`: could not find `enum_cycler` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\enum_cycler_impl.rs:58:125: error[E0433]: cannot find `enum_cycler` in `autogen`: could not find `enum_cycler` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\enum_cycler_impl.rs:61:137: error[E0433]: cannot find `enum_cycler` in `autogen`: could not find `enum_cycler` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_field_impl.rs:55:81: error[E0433]: cannot find `float_field` in `autogen`: could not find `float_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_field_impl.rs:56:125: error[E0433]: cannot find `float_field` in `autogen`: could not find `float_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_field_impl.rs:59:137: error[E0433]: cannot find `float_field` in `autogen`: could not find `float_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_slider_impl.rs:55:81: error[E0433]: cannot find `float_slider` in `autogen`: could not find `float_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_slider_impl.rs:56:125: error[E0433]: cannot find `float_slider` in `autogen`: could not find `float_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_slider_impl.rs:59:137: error[E0433]: cannot find `float_slider` in `autogen`: could not find `float_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_field_impl.rs:55:81: error[E0433]: cannot find `int_field` in `autogen`: could not find `int_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_field_impl.rs:56:125: error[E0433]: cannot find `int_field` in `autogen`: could not find `int_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_field_impl.rs:59:137: error[E0433]: cannot find `int_field` in `autogen`: could not find `int_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_slider_impl.rs:55:81: error[E0433]: cannot find `int_slider` in `autogen`: could not find `int_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_slider_impl.rs:56:125: error[E0433]: cannot find `int_slider` in `autogen`: could not find `int_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_slider_impl.rs:59:137: error[E0433]: cannot find `int_slider` in `autogen`: could not find `int_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\item_field_impl.rs:53:81: error[E0433]: cannot find `item_field` in `autogen`: could not find `item_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\item_field_impl.rs:54:125: error[E0433]: cannot find `item_field` in `autogen`: could not find `item_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\item_field_impl.rs:57:137: error[E0433]: cannot find `item_field` in `autogen`: could not find `item_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\label_impl.rs:27:75: error[E0433]: cannot find `label` in `autogen`: could not find `label` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\list_group_impl.rs:121:95: error[E0433]: cannot find `list_group` in `autogen`: could not find `list_group` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_field_impl.rs:55:81: error[E0433]: cannot find `long_field` in `autogen`: could not find `long_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_field_impl.rs:56:125: error[E0433]: cannot find `long_field` in `autogen`: could not find `long_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_field_impl.rs:59:137: error[E0433]: cannot find `long_field` in `autogen`: could not find `long_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_slider_impl.rs:55:81: error[E0433]: cannot find `long_slider` in `autogen`: could not find `long_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_slider_impl.rs:56:125: error[E0433]: cannot find `long_slider` in `autogen`: could not find `long_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_slider_impl.rs:59:137: error[E0433]: cannot find `long_slider` in `autogen`: could not find `long_slider` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\master_tick_box_impl.rs:53:81: error[E0433]: cannot find `master_tick_box` in `autogen`: could not find `master_tick_box` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\master_tick_box_impl.rs:54:125: error[E0433]: cannot find `master_tick_box` in `autogen`: could not find `master_tick_box` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\master_tick_box_impl.rs:57:137: error[E0433]: cannot find `master_tick_box` in `autogen`: could not find `master_tick_box` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\string_field_impl.rs:52:81: error[E0433]: cannot find `string_field` in `autogen`: could not find `string_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\string_field_impl.rs:53:125: error[E0433]: cannot find `string_field` in `autogen`: could not find `string_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\string_field_impl.rs:56:137: error[E0433]: cannot find `string_field` in `autogen`: could not find `string_field` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\tick_box_impl.rs:52:81: error[E0433]: cannot find `tick_box` in `autogen`: could not find `tick_box` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\tick_box_impl.rs:53:125: error[E0433]: cannot find `tick_box` in `autogen`: could not find `tick_box` in `autogen`
+src\dev\isxander\yacl3\config\v2\impl\autogen\tick_box_impl.rs:56:137: error[E0433]: cannot find `tick_box` in `autogen`: could not find `tick_box` in `autogen`
+src\dev\isxander\yacl3\gui\abstract_widget.rs:19:31: error[E0106]: missing lifetime specifier: expected named lifetime parameter
+src\dev\isxander\yacl3\gui\controllers\cycling\cycling_list_controller.rs:48:28: error[E0403]: the name `T` is already used for a generic parameter in this item's generic parameters: already used
+src\dev\isxander\yacl3\gui\controllers\cycling\enum_controller.rs:57:34: error[E0403]: the name `T` is already used for a generic parameter in this item's generic parameters: already used
+src\dev\isxander\yacl3\gui\controllers\cycling\enum_controller.rs:67:28: error[E0403]: the name `T` is already used for a generic parameter in this item's generic parameters: already used
+src\dev\isxander\yacl3\gui\controllers\dropdown\enum_dropdown_controller.rs:64:118: error[E0106]: missing lifetime specifier: expected named lifetime parameter
+src\dev\isxander\yacl3\gui\image\yacl_image_reload_listener.rs:138:19: error[E0403]: the name `X` is already used for a generic parameter in this item's generic parameters: already used
+src\dev\isxander\yacl3\gui\image\yacl_image_reload_listener.rs:138:31: error[E0403]: the name `T` is already used for a generic parameter in this item's generic parameters: already used
+src\dev\isxander\yacl3\gui\option_list_widget.rs:768:15: error[E0106]: missing lifetime specifier: expected named lifetime parameter
+src\dev\isxander\yacl3\gui\search_field_widget.rs:24:22: error[E0106]: missing lifetime specifier: expected named lifetime parameter
+src\mixins\container_event_handler_mixin.rs:14:133: error[E0425]: cannot find type `ContainerEventHandler` in module `mcrust::net::minecraft::client::gui::components::events::container_event_handler`: not found in `mcrust::net::minecraft::client::gui::components::events::container_event_handler`
+src\mixins\container_event_handler_mixin.rs:36:133: error[E0425]: cannot find type `ContainerEventHandler` in module `mcrust::net::minecraft::client::gui::components::events::container_event_handler`: not found in `mcrust::net::minecraft::client::gui::components::events::container_event_handler`
+src\dev\isxander\yacl3\config\v2\impl\autogen\boolean_impl.rs:71:16: error[E0425]: cannot find value `builder` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\boolean_impl.rs:82:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\boolean_impl.rs:82:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\boolean_impl.rs:82:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\boolean_impl.rs:99:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\color_field_impl.rs:75:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\color_field_impl.rs:75:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\color_field_impl.rs:75:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\color_field_impl.rs:92:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_field_impl.rs:92:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_field_impl.rs:92:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_field_impl.rs:92:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_field_impl.rs:109:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_slider_impl.rs:93:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_slider_impl.rs:93:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_slider_impl.rs:93:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\double_slider_impl.rs:110:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\dropdown_impl.rs:74:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\dropdown_impl.rs:74:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\dropdown_impl.rs:74:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\dropdown_impl.rs:91:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\enum_cycler_impl.rs:96:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\enum_cycler_impl.rs:96:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\enum_cycler_impl.rs:96:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\enum_cycler_impl.rs:113:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_field_impl.rs:92:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_field_impl.rs:92:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_field_impl.rs:92:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_field_impl.rs:109:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_slider_impl.rs:93:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_slider_impl.rs:93:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_slider_impl.rs:93:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\float_slider_impl.rs:110:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_field_impl.rs:88:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_field_impl.rs:88:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_field_impl.rs:88:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_field_impl.rs:105:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_slider_impl.rs:89:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_slider_impl.rs:89:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_slider_impl.rs:89:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\int_slider_impl.rs:106:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\item_field_impl.rs:74:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\item_field_impl.rs:74:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\item_field_impl.rs:74:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\item_field_impl.rs:91:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_field_impl.rs:88:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_field_impl.rs:88:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_field_impl.rs:88:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_field_impl.rs:105:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_slider_impl.rs:89:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_slider_impl.rs:89:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_slider_impl.rs:89:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\long_slider_impl.rs:106:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\master_tick_box_impl.rs:83:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\master_tick_box_impl.rs:83:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\master_tick_box_impl.rs:83:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\master_tick_box_impl.rs:100:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\string_field_impl.rs:73:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\string_field_impl.rs:73:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\string_field_impl.rs:73:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\string_field_impl.rs:90:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\tick_box_impl.rs:73:42: error[E0425]: cannot find type `A` in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\tick_box_impl.rs:73:84: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\tick_box_impl.rs:73:210: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\impl\autogen\tick_box_impl.rs:90:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\gui\controllers\dropdown\dropdown_string_controller.rs:86:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\gui\controllers\dropdown\enum_dropdown_controller.rs:131:93: error[E0425]: cannot find type `T` in this scope
+src\dev\isxander\yacl3\gui\controllers\dropdown\item_controller.rs:108:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\gui\controllers\string\number\double_field_controller.rs:126:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\gui\controllers\string\number\float_field_controller.rs:126:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\gui\controllers\string\number\integer_field_controller.rs:126:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\gui\controllers\string\number\long_field_controller.rs:126:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\label_option_impl.rs:97:59: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\label_option_impl.rs:102:64: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\label_option_impl.rs:107:53: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\label_option_impl.rs:109:129: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\label_option_impl.rs:130:32: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\label_option_impl.rs:135:42: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\label_option_impl.rs:166:91: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\label_option_impl.rs:171:129: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\label_option_impl.rs:171:134: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\list_option_entry_impl.rs:225:14: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\list_option_entry_impl.rs:231:44: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\list_option_entry_impl.rs:239:28: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\list_option_entry_impl.rs:246:32: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\list_option_impl.rs:410:76: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\list_option_impl.rs:410:114: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\list_option_impl.rs:417:83: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\list_option_impl.rs:417:121: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\list_option_impl.rs:428:66: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\impl\list_option_impl.rs:428:107: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src\dev\isxander\yacl3\config\v2\api\field_access.rs:8:44: error[E0107]: missing generics for trait `ReadOnlyFieldAccess`: expected 1 generic argument
+src\dev\isxander\yacl3\api\button_option.rs:11:67: error[E0107]: missing generics for trait `yacl3::api::option::Option`: expected 1 generic argument
+src\dev\isxander\yacl3\api\utils\mutable_dimension.rs:8:49: error[E0107]: missing generics for trait `yacl3::api::utils::dimension::Dimension`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\controllers\cycling\i_cycling_controller.rs:12:51: error[E0107]: missing generics for trait `Controller`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\controllers\dropdown\abstract_dropdown_controller.rs:51:59: error[E0107]: missing generics for trait `IStringController`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\controllers\string\i_string_controller.rs:14:50: error[E0107]: missing generics for trait `Controller`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\controllers\string\string_controller_element.rs:117:36: error[E0107]: missing generics for trait `ControllerWidget`: expected 1 generic argument
+src\dev\isxander\yacl3\api\list_option.rs:18:99: error[E0107]: missing generics for trait `yacl3::api::option::Option`: expected 1 generic argument
+src\dev\isxander\yacl3\api\list_option_entry.rs:10:90: error[E0107]: missing generics for trait `yacl3::api::option::Option`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\controllers\controller_popup_widget.rs:49:54: error[E0107]: missing generics for trait `ControllerWidget`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\controllers\slider\i_slider_controller.rs:12:50: error[E0107]: missing generics for trait `Controller`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\option_list_widget.rs:47:38: error[E0121]: the placeholder `_` is not allowed within types on item signatures for structs: not allowed in type signatures
+src\dev\isxander\yacl3\gui\option_list_widget.rs:47:41: error[E0121]: the placeholder `_` is not allowed within types on item signatures for structs: not allowed in type signatures
+src\dev\isxander\yacl3\gui\option_list_widget.rs:372:81: error[E0121]: the placeholder `_` is not allowed within types on item signatures for structs: not allowed in type signatures
+src\dev\isxander\yacl3\gui\option_list_widget.rs:372:84: error[E0121]: the placeholder `_` is not allowed within types on item signatures for structs: not allowed in type signatures
+src\dev\isxander\yacl3\gui\option_list_widget.rs:402:73: error[E0107]: missing generics for trait `yacl_selection_list::Entry`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\option_list_widget.rs:772:29: error[E0121]: the placeholder `_` is not allowed within types on item signatures for structs: not allowed in type signatures
+src\dev\isxander\yacl3\gui\option_list_widget.rs:772:32: error[E0121]: the placeholder `_` is not allowed within types on item signatures for structs: not allowed in type signatures
+src\dev\isxander\yacl3\api\controller\cycling_list_controller_builder.rs:9:61: error[E0107]: missing generics for trait `ValueFormattableController`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\value_formattable_controller.rs:10:79: error[E0107]: missing generics for trait `ControllerBuilder`: expected 1 generic argument
+src\dev\isxander\yacl3\api\controller\enum_controller_builder.rs:9:54: error[E0107]: missing generics for trait `ValueFormattableController`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\enum_dropdown_controller_builder.rs:9:62: error[E0107]: missing generics for trait `ValueFormattableController`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\boolean_controller_builder.rs:9:37: error[E0107]: missing generics for trait `ValueFormattableController`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\color_controller_builder.rs:10:35: error[E0107]: missing generics for trait `ControllerBuilder`: expected 1 generic argument
+src\dev\isxander\yacl3\api\controller\string_controller_builder.rs:10:36: error[E0107]: missing generics for trait `ControllerBuilder`: expected 1 generic argument
+src\dev\isxander\yacl3\api\label_option.rs:11:66: error[E0107]: missing generics for trait `yacl3::api::option::Option`: expected 1 generic argument
+src\dev\isxander\yacl3\config\v3\codec_config.rs:41:59: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\codec_config.rs:49:50: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\codec_config.rs:60:56: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\codec_config.rs:66:75: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\codec_config.rs:76:54: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\config_entry.rs:10:44: error[E0107]: missing generics for trait `readonly_config_entry::ReadonlyConfigEntry`: expected 1 generic argument
+src\dev\isxander\yacl3\config\v3\readonly_config_entry.rs:29:48: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\readonly_config_entry.rs:29:85: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\readonly_config_entry.rs:29:114: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\readonly_config_entry.rs:32:65: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\gui\option_list_widget.rs:862:87: error[E0121]: the placeholder `_` is not allowed within types on item signatures for methods: not allowed in type signatures
+src\dev\isxander\yacl3\gui\option_list_widget.rs:862:90: error[E0121]: the placeholder `_` is not allowed within types on item signatures for methods: not allowed in type signatures
+src\mixins\gui_graphics_extractor_mixin.rs:13:129: error[E0782]: expected a type, found a trait
+src\dev\isxander\yacl3\api\controller\double_field_controller_builder.rs:9:41: error[E0107]: missing generics for trait `NumberFieldControllerBuilder`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\number_field_controller_builder.rs:8:81: error[E0107]: missing generics for trait `ValueFormattableController`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\double_slider_controller_builder.rs:9:42: error[E0107]: missing generics for trait `SliderControllerBuilder`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\slider_controller_builder.rs:8:76: error[E0107]: missing generics for trait `ValueFormattableController`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\float_field_controller_builder.rs:9:40: error[E0107]: missing generics for trait `NumberFieldControllerBuilder`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\float_slider_controller_builder.rs:9:41: error[E0107]: missing generics for trait `SliderControllerBuilder`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\integer_field_controller_builder.rs:9:42: error[E0107]: missing generics for trait `NumberFieldControllerBuilder`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\integer_slider_controller_builder.rs:9:43: error[E0107]: missing generics for trait `SliderControllerBuilder`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\item_controller_builder.rs:10:34: error[E0107]: missing generics for trait `ControllerBuilder`: expected 1 generic argument
+src\dev\isxander\yacl3\api\controller\long_field_controller_builder.rs:9:39: error[E0107]: missing generics for trait `NumberFieldControllerBuilder`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\long_slider_controller_builder.rs:9:40: error[E0107]: missing generics for trait `SliderControllerBuilder`: expected 2 generic arguments
+src\dev\isxander\yacl3\api\controller\tick_box_controller_builder.rs:9:37: error[E0107]: missing generics for trait `ControllerBuilder`: expected 1 generic argument
+src\dev\isxander\yacl3\config\v2\api\autogen\simple_option_factory.rs:41:72: error[E0107]: missing generics for trait `option_factory::OptionFactory`: expected 2 generic arguments
+src\dev\isxander\yacl3\config\v2\impl\config_class_handler_impl.rs:172:25: error[E0053]: method `fields` has an incompatible type for trait: expected `dyn ConfigField`, found `ConfigFieldImpl<Arc<...>>`
+src\dev\isxander\yacl3\config\v2\impl\config_field_impl.rs:70:25: error[E0053]: method `access` has an incompatible type for trait: expected `Arc<ReentrantMutex<RawMutex, ..., ...>>`, found `ReflectionFieldAccess<T>`
+src\dev\isxander\yacl3\config\v2\impl\config_field_impl.rs:75:33: error[E0053]: method `default_access` has an incompatible type for trait: expected `Arc<ReentrantMutex<RawMutex, ..., ...>>`, found `ReflectionFieldAccess<T>`
+src\dev\isxander\yacl3\config\v2\impl\config_field_impl.rs:137:1: error[E0046]: not all trait items implemented, missing: `serial_name`, `comment`, `required`, `nullable`: missing `serial_name`, `comment`, `required`, `nullable` in implementation
+src\dev\isxander\yacl3\config\v2\impl\config_field_impl.rs:171:1: error[E0046]: not all trait items implemented, missing: `category`, `group`: missing `category`, `group` in implementation
+src\dev\isxander\yacl3\config\v2\impl\reflection_field_access.rs:55:22: error[E0053]: method `get` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\config\v2\impl\serializer\gson_config_serializer.rs:348:61: error[E0053]: method `set_path` has an incompatible type for trait: expected `Arc<ReentrantMutex<RawMutex, ..., ...>>`, found `gson_config_serializer::Builder<T>`
+src\dev\isxander\yacl3\config\v2\impl\serializer\gson_config_serializer.rs:354:80: error[E0053]: method `override_gson_builder` has an incompatible type for trait: expected `Arc<ReentrantMutex<RawMutex, ..., ...>>`, found `gson_config_serializer::Builder<T>`
+src\dev\isxander\yacl3\config\v2\impl\serializer\gson_config_serializer.rs:360:70: error[E0053]: method `override_gson_builder_gson` has an incompatible type for trait: expected `Arc<ReentrantMutex<RawMutex, ..., ...>>`, found `gson_config_serializer::Builder<T>`
+src\dev\isxander\yacl3\config\v2\impl\serializer\gson_config_serializer.rs:367:113: error[E0053]: method `append_gson_builder` has an incompatible type for trait: expected `Arc<ReentrantMutex<RawMutex, ..., ...>>`, found `gson_config_serializer::Builder<T>`
+src\dev\isxander\yacl3\config\v2\impl\serializer\gson_config_serializer.rs:374:49: error[E0053]: method `set_json5` has an incompatible type for trait: expected `Arc<ReentrantMutex<RawMutex, ..., ...>>`, found `gson_config_serializer::Builder<T>`
+src\dev\isxander\yacl3\config\v2\impl\serializer\gson_config_serializer.rs:380:24: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<ReentrantMutex<RawMutex, ..., ...>>`, found `GsonConfigSerializer<T>`
+src\dev\isxander\yacl3\config\v3\abstract_config_entry.rs:53:52: error[E0107]: missing generics for trait `AbstractReadonlyConfigEntry`: expected 1 generic argument
+src\dev\isxander\yacl3\config\v3\abstract_config_entry.rs:53:82: error[E0107]: missing generics for trait `config_entry::ConfigEntry`: expected 1 generic argument
+src\dev\isxander\yacl3\config\v3\abstract_readonly_config_entry.rs:31:60: error[E0107]: missing generics for trait `readonly_config_entry::ReadonlyConfigEntry`: expected 1 generic argument
+src\dev\isxander\yacl3\config\v3\child_config_entry_impl.rs:76:48: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\child_config_entry_impl.rs:76:85: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\child_config_entry_impl.rs:76:114: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\child_config_entry_impl.rs:81:65: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\child_config_entry_impl.rs:99:22: error[E0053]: method `get` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\config\v3\child_config_entry_impl.rs:104:40: error[E0053]: method `modify_get` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\config\v3\codec_config_entry_impl.rs:75:28: error[E0053]: method `inner_get` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\config\v3\codec_config_entry_impl.rs:87:48: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\codec_config_entry_impl.rs:87:85: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\codec_config_entry_impl.rs:87:114: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\codec_config_entry_impl.rs:92:65: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src\dev\isxander\yacl3\config\v3\codec_config_entry_impl.rs:112:22: error[E0053]: method `get` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\config\v3\codec_config_entry_impl.rs:117:40: error[E0053]: method `modify_get` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\config\v3\codec_config_entry_impl.rs:128:30: error[E0053]: method `set` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\config\v3\codec_config_entry_impl.rs:133:32: error[E0053]: method `default_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\config\v3\codec_config_entry_impl.rs:138:40: error[E0053]: method `modify_set` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\config\v3\codec_config_entry_impl.rs:126:1: error[E0046]: not all trait items implemented, missing: `modify_get`: missing `modify_get` in implementation
+src\dev\isxander\yacl3\config\v3\json_file_codec_config.rs:49:52: error[E0107]: missing generics for trait `CodecConfig`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\controllers\action_controller.rs:63:5: error[E0053]: method `option` has an incompatible type for trait: expected trait `Option`, found trait `ButtonOption`
+src\dev\isxander\yacl3\gui\controllers\color_controller.rs:103:25: error[E0053]: method `option` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `mcrust::java::awt::color::Color`
+src\dev\isxander\yacl3\gui\controllers\cycling\cycling_list_controller.rs:55:54: error[E0107]: missing generics for trait `ICyclingController`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\controllers\cycling\cycling_list_controller.rs:95:25: error[E0053]: method `option` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\gui\controllers\cycling\enum_controller.rs:107:25: error[E0053]: method `option` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\gui\controllers\slider\double_slider_controller.rs:105:25: error[E0053]: method `option` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f64`
+src\dev\isxander\yacl3\gui\controllers\slider\float_slider_controller.rs:105:25: error[E0053]: method `option` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f32`
+src\dev\isxander\yacl3\gui\controllers\slider\integer_slider_controller.rs:105:25: error[E0053]: method `option` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\gui\controllers\slider\long_slider_controller.rs:105:25: error[E0053]: method `option` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i64`
+src\dev\isxander\yacl3\gui\controllers\string\number\number_field_controller.rs:45:54: error[E0107]: missing generics for trait `ISliderController`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\controllers\string\number\number_field_controller.rs:45:74: error[E0107]: missing generics for trait `IStringController`: expected 1 generic argument
+src\dev\isxander\yacl3\gui\controllers\string\string_controller.rs:49:25: error[E0053]: method `option` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `std::string::String`
+src\dev\isxander\yacl3\gui\option_list_widget.rs:61:42: error[E0121]: the placeholder `_` is not allowed within types on item signatures for associated types: not allowed in type signatures
+src\dev\isxander\yacl3\gui\option_list_widget.rs:61:45: error[E0121]: the placeholder `_` is not allowed within types on item signatures for associated types: not allowed in type signatures
+src\dev\isxander\yacl3\gui\option_list_widget.rs:328:25: error[E0121]: the placeholder `_` is not allowed within types on item signatures for implementations: not allowed in type signatures
+src\dev\isxander\yacl3\gui\option_list_widget.rs:328:28: error[E0121]: the placeholder `_` is not allowed within types on item signatures for implementations: not allowed in type signatures
+src\dev\isxander\yacl3\gui\option_list_widget.rs:378:85: error[E0121]: the placeholder `_` is not allowed within types on item signatures for associated types: not allowed in type signatures
+src\dev\isxander\yacl3\gui\option_list_widget.rs:378:88: error[E0121]: the placeholder `_` is not allowed within types on item signatures for associated types: not allowed in type signatures
+src\dev\isxander\yacl3\gui\render\color_gradient_render_state.rs:101:1: error[E0046]: not all trait items implemented, missing: `base_state`: missing `base_state` in implementation
+src\dev\isxander\yacl3\impl\button_option_impl.rs:97:5: error[E0053]: method `controller` has an incompatible type for trait: expected trait `std::any::Any + std::marker::Send + Sync`, found trait `Fn(std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<YACLScreen>>>, std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<(dyn button_option::ButtonOption + 'static)>>>)`
+src\dev\isxander\yacl3\impl\button_option_impl.rs:102:5: error[E0053]: method `state_manager` has an incompatible type for trait: expected trait `std::any::Any + std::marker::Send + Sync`, found trait `Fn(std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<YACLScreen>>>, std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<(dyn button_option::ButtonOption + 'static)>>>)`
+src\dev\isxander\yacl3\impl\button_option_impl.rs:107:5: error[E0053]: method `binding` has an incompatible type for trait: expected trait `std::any::Any + std::marker::Send + Sync`, found trait `Fn(std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<YACLScreen>>>, std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<(dyn button_option::ButtonOption + 'static)>>>)`
+src\dev\isxander\yacl3\impl\button_option_impl.rs:122:5: error[E0053]: method `pending_value` has an incompatible type for trait: expected trait `std::any::Any + std::marker::Send + Sync`, found trait `Fn(std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<YACLScreen>>>, std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<(dyn button_option::ButtonOption + 'static)>>>)`
+src\dev\isxander\yacl3\impl\button_option_impl.rs:127:5: error[E0053]: method `request_set` has an incompatible type for trait: expected trait `std::any::Any + std::marker::Send + Sync`, found trait `Fn(std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<YACLScreen>>>, std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<(dyn button_option::ButtonOption + 'static)>>>)`
+src\dev\isxander\yacl3\impl\button_option_impl.rs:150:5: error[E0053]: method `add_event_listener` has an incompatible type for trait: expected trait `std::any::Any + std::marker::Send + Sync`, found trait `Fn(std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<YACLScreen>>>, std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<(dyn button_option::ButtonOption + 'static)>>>)`
+src\dev\isxander\yacl3\impl\button_option_impl.rs:154:5: error[E0053]: method `add_listener` has an incompatible type for trait: expected trait `std::any::Any + std::marker::Send + Sync`, found trait `Fn(std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<YACLScreen>>>, std::sync::Arc<ReentrantMutex<parking_lot::RawMutex, RawThreadId, RefCell<(dyn button_option::ButtonOption + 'static)>>>)`
+src\dev\isxander\yacl3\impl\controller\abstract_controller_builder_impl.rs:27:62: error[E0107]: missing generics for trait `ControllerBuilder`: expected 1 generic argument
+src\dev\isxander\yacl3\impl\controller\boolean_controller_builder_impl.rs:72:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `bool`
+src\dev\isxander\yacl3\impl\controller\boolean_controller_builder_impl.rs:103:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `bool`
+src\dev\isxander\yacl3\impl\controller\color_controller_builder_impl.rs:63:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `mcrust::java::awt::color::Color`
+src\dev\isxander\yacl3\impl\controller\cycling_list_controller_builder_impl.rs:67:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\controller\cycling_list_controller_builder_impl.rs:94:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\controller\double_field_controller_builder_impl.rs:76:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f64`
+src\dev\isxander\yacl3\impl\controller\double_field_controller_builder_impl.rs:87:28: error[E0053]: method `min` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f64`
+src\dev\isxander\yacl3\impl\controller\double_field_controller_builder_impl.rs:93:28: error[E0053]: method `max` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f64`
+src\dev\isxander\yacl3\impl\controller\double_field_controller_builder_impl.rs:99:30: error[E0053]: method `range` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f64`
+src\dev\isxander\yacl3\impl\controller\double_field_controller_builder_impl.rs:109:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f64`
+src\dev\isxander\yacl3\impl\controller\double_slider_controller_builder_impl.rs:79:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f64`
+src\dev\isxander\yacl3\impl\controller\double_slider_controller_builder_impl.rs:90:30: error[E0053]: method `range` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f64`
+src\dev\isxander\yacl3\impl\controller\double_slider_controller_builder_impl.rs:97:30: error[E0053]: method `step` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f64`
+src\dev\isxander\yacl3\impl\controller\double_slider_controller_builder_impl.rs:106:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f64`
+src\dev\isxander\yacl3\impl\controller\string_controller_builder_impl.rs:54:40: error[E0107]: missing generics for trait `AbstractControllerBuilderImpl`: expected 1 generic argument
+src\dev\isxander\yacl3\impl\controller\dropdown_string_controller_builder_impl.rs:84:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `std::string::String`
+src\dev\isxander\yacl3\impl\controller\enum_controller_builder_impl.rs:67:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\controller\enum_controller_builder_impl.rs:93:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\controller\enum_dropdown_controller_builder_impl.rs:65:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `E`
+src\dev\isxander\yacl3\impl\controller\enum_dropdown_controller_builder_impl.rs:76:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `E`
+src\dev\isxander\yacl3\impl\controller\float_field_controller_builder_impl.rs:76:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f32`
+src\dev\isxander\yacl3\impl\controller\float_field_controller_builder_impl.rs:87:28: error[E0053]: method `min` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f32`
+src\dev\isxander\yacl3\impl\controller\float_field_controller_builder_impl.rs:93:28: error[E0053]: method `max` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f32`
+src\dev\isxander\yacl3\impl\controller\float_field_controller_builder_impl.rs:99:30: error[E0053]: method `range` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f32`
+src\dev\isxander\yacl3\impl\controller\float_field_controller_builder_impl.rs:109:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f32`
+src\dev\isxander\yacl3\impl\controller\float_slider_controller_builder_impl.rs:79:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f32`
+src\dev\isxander\yacl3\impl\controller\float_slider_controller_builder_impl.rs:90:30: error[E0053]: method `range` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f32`
+src\dev\isxander\yacl3\impl\controller\float_slider_controller_builder_impl.rs:97:30: error[E0053]: method `step` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f32`
+src\dev\isxander\yacl3\impl\controller\float_slider_controller_builder_impl.rs:106:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `f32`
+src\dev\isxander\yacl3\impl\controller\integer_field_controller_builder_impl.rs:76:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\controller\integer_field_controller_builder_impl.rs:87:28: error[E0053]: method `min` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\controller\integer_field_controller_builder_impl.rs:93:28: error[E0053]: method `max` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\controller\integer_field_controller_builder_impl.rs:99:30: error[E0053]: method `range` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\controller\integer_field_controller_builder_impl.rs:109:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\controller\integer_slider_controller_builder_impl.rs:79:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\controller\integer_slider_controller_builder_impl.rs:90:30: error[E0053]: method `range` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\controller\integer_slider_controller_builder_impl.rs:97:30: error[E0053]: method `step` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\controller\integer_slider_controller_builder_impl.rs:106:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\controller\item_controller_builder_impl.rs:60:28: error[E0053]: method `build` has an incompatible type for trait: expected `dyn std::any::Any`, found `Item`
+src\dev\isxander\yacl3\impl\controller\long_field_controller_builder_impl.rs:76:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i64`
+src\dev\isxander\yacl3\impl\controller\long_field_controller_builder_impl.rs:87:28: error[E0053]: method `min` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i64`
+src\dev\isxander\yacl3\impl\controller\long_field_controller_builder_impl.rs:93:28: error[E0053]: method `max` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i64`
+src\dev\isxander\yacl3\impl\controller\long_field_controller_builder_impl.rs:99:30: error[E0053]: method `range` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i64`
+src\dev\isxander\yacl3\impl\controller\long_field_controller_builder_impl.rs:109:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i64`
+src\dev\isxander\yacl3\impl\controller\long_slider_controller_builder_impl.rs:79:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i64`
+src\dev\isxander\yacl3\impl\controller\long_slider_controller_builder_impl.rs:90:30: error[E0053]: method `range` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i64`
+src\dev\isxander\yacl3\impl\controller\long_slider_controller_builder_impl.rs:97:30: error[E0053]: method `step` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i64`
+src\dev\isxander\yacl3\impl\controller\long_slider_controller_builder_impl.rs:106:47: error[E0053]: method `format_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i64`
+src\dev\isxander\yacl3\impl\controller\string_controller_builder_impl.rs:94:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `std::string::String`
+src\dev\isxander\yacl3\impl\controller\tick_box_controller_builder_impl.rs:59:28: error[E0053]: method `build` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `bool`
+src\dev\isxander\yacl3\impl\hidden_name_list_option_entry.rs:65:32: error[E0053]: method `state_manager` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\hidden_name_list_option_entry.rs:70:29: error[E0053]: method `controller` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\hidden_name_list_option_entry.rs:75:26: error[E0053]: method `binding` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\hidden_name_list_option_entry.rs:100:32: error[E0053]: method `pending_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\hidden_name_list_option_entry.rs:105:42: error[E0053]: method `request_set` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\hidden_name_list_option_entry.rs:135:50: error[E0053]: method `add_listener` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\hidden_name_list_option_entry.rs:140:52: error[E0053]: method `add_event_listener` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\option_impl.rs:73:85: error[E0107]: missing generics for trait `yacl3::api::option::Option`: expected 1 generic argument
+src\dev\isxander\yacl3\impl\list_option_entry_impl.rs:86:29: error[E0053]: method `controller` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\list_option_entry_impl.rs:91:32: error[E0053]: method `state_manager` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\list_option_entry_impl.rs:96:26: error[E0053]: method `binding` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\list_option_entry_impl.rs:115:32: error[E0053]: method `pending_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\list_option_entry_impl.rs:120:42: error[E0053]: method `request_set` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\list_option_entry_impl.rs:148:52: error[E0053]: method `add_event_listener` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\list_option_entry_impl.rs:152:50: error[E0053]: method `add_listener` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found type parameter `T`
+src\dev\isxander\yacl3\impl\list_option_impl.rs:139:1: error[E0046]: not all trait items implemented, missing: `options`: missing `options` in implementation
+src\dev\isxander\yacl3\impl\list_option_impl.rs:213:88: error[E0107]: missing generics for trait `yacl3::api::option::Option`: expected 1 generic argument
+src\dev\isxander\yacl3\impl\list_option_impl.rs:218:95: error[E0107]: missing generics for trait `yacl3::api::option::Option`: expected 1 generic argument
+src\dev\isxander\yacl3\impl\list_option_impl.rs:223:91: error[E0107]: missing generics for trait `yacl3::api::option::Option`: expected 1 generic argument
+src\dev\isxander\yacl3\impl\list_option_impl.rs:250:29: error[E0053]: method `controller` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `Vec<T>`
+src\dev\isxander\yacl3\impl\list_option_impl.rs:255:32: error[E0053]: method `state_manager` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `Vec<T>`
+src\dev\isxander\yacl3\impl\list_option_impl.rs:260:26: error[E0053]: method `binding` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `Vec<T>`
+src\dev\isxander\yacl3\impl\list_option_impl.rs:273:32: error[E0053]: method `pending_value` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `Vec<T>`
+src\dev\isxander\yacl3\impl\list_option_impl.rs:278:42: error[E0053]: method `request_set` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `Vec<T>`
+src\dev\isxander\yacl3\impl\list_option_impl.rs:331:52: error[E0053]: method `add_event_listener` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `Vec<T>`
+src\dev\isxander\yacl3\impl\list_option_impl.rs:336:50: error[E0053]: method `add_listener` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `Vec<T>`
+src\dev\isxander\yacl3\impl\option_description_impl.rs:45:1: error[E0046]: not all trait items implemented, missing: `text`, `image`: missing `text`, `image` in implementation
+src\dev\isxander\yacl3\impl\option_group_impl.rs:52:1: error[E0046]: not all trait items implemented, missing: `name`, `collapsed`, `is_root`: missing `name`, `collapsed`, `is_root` in implementation
+src\dev\isxander\yacl3\impl\placeholder_category_impl.rs:37:1: error[E0046]: not all trait items implemented, missing: `screen`: missing `screen` in implementation
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:98:20: error[E0053]: method `x` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:103:20: error[E0053]: method `y` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:108:24: error[E0053]: method `width` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:113:25: error[E0053]: method `height` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:118:26: error[E0053]: method `x_limit` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:123:26: error[E0053]: method `y_limit` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:128:27: error[E0053]: method `center_x` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:133:27: error[E0053]: method `center_y` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:138:34: error[E0053]: method `is_point_inside` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:143:24: error[E0053]: method `clone` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:148:25: error[E0053]: method `with_x` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:153:25: error[E0053]: method `with_y` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:158:33: error[E0053]: method `with_width` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:163:35: error[E0053]: method `with_height` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:168:24: error[E0053]: method `moved` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`
+src\dev\isxander\yacl3\impl\utils\dimension_integer_impl.rs:173:31: error[E0053]: method `expanded` has an incompatible type for trait: expected `Arc<dyn Any + Send + Sync>`, found `i32`

@@ -2,19 +2,24 @@
 
 #[allow(unused_imports)]
 use crate::prelude::*;
+use crate::dev::isxander::yacl3::config::v2::r#impl::serializer::gson_config_serializer;
 use crate::dev::isxander::yacl3::config::v3::codec_config::CodecConfig;
 use crate::dev::isxander::yacl3::config::v3::codec_config::CodecConfigBase;
 use mcrust::com::mojang::serialization::data_result::DataResult;
+use mcrust::com::mojang::serialization::Obj;
 use mcrust::java::lang::throwable::Throwable;
 
 /// java: @ApiStatus.Experimental public abstract class JsonFileCodecConfig<T extends JsonFileCodecConfig<T>> extends CodecConfig<T>
-pub struct JsonFileCodecConfigBase<T> {
+/// - its fields.
+pub struct JsonFileCodecConfigBase<T: 'static> {
     /// java: extends CodecConfig
     pub base: CodecConfigBase<T>,
     /// java: private final Path configPath;
     pub config_path: std::path::PathBuf,
-    /// java: private final Gson gson;
-    pub gson: Option<compat::Gson>,
+    /// java: private final Gson gson; - `this.gson = createGson()` in the constructor. `createGson` is virtual and a
+    /// Rust base cannot call the subclass's override before the subclass exists, so the field is filled by the first
+    /// read (`JsonFileCodecConfig::gson`), through the override.
+    pub gson: std::cell::OnceCell<compat::Gson>,
 }
 
 impl<T: 'static> std::ops::Deref for JsonFileCodecConfigBase<T> {
@@ -24,97 +29,92 @@ impl<T: 'static> std::ops::Deref for JsonFileCodecConfigBase<T> {
     }
 }
 
-impl<T: 'static> std::ops::DerefMut for JsonFileCodecConfigBase<T> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
-    }
-}
-
-impl<T: Clone + 'static> JsonFileCodecConfigBase<T> {
+impl<T: 'static> JsonFileCodecConfigBase<T> {
     /// java: public JsonFileCodecConfig(Path configPath)
-    pub fn new(mut config_path: std::path::PathBuf) -> Self {
-        let __init_config_path = config_path.clone();
-        let mut this = Self {
-            base: CodecConfigBase::<T>::new(),
-            config_path: __init_config_path,
-            gson: None,
-        };
-        this.gson = Some(this.create_gson());
-        this
+    pub fn new(config_path: std::path::PathBuf) -> Self {
+        Self { base: CodecConfigBase::new(), config_path, gson: std::cell::OnceCell::new() }
     }
-
 }
 
-/// java: the virtual methods of JsonFileCodecConfig (implemented by JsonFileCodecConfigBase and every subclass)
-pub trait JsonFileCodecConfig<T: Clone + 'static>: CodecConfig {
+/// java: the virtual methods of JsonFileCodecConfig (implemented by every subclass)
+pub trait JsonFileCodecConfig<T: 'static>: CodecConfig<T> {
     fn json_file_codec_config_base(&self) -> &JsonFileCodecConfigBase<T>;
-    fn json_file_codec_config_base_mut(&mut self) -> &mut JsonFileCodecConfigBase<T>;
+
+    /// java: private final Gson gson; (read)
+    fn gson(&self) -> compat::Gson {
+        self.json_file_codec_config_base().gson.get_or_init(|| self.create_gson()).clone()
+    }
 
     /// java: public void saveToFile()
     fn save_to_file(&self) {
-        let mut json_tree_result: DataResult<serde_json::Value> = self.encode_start(&mcrust::com::mojang::serialization::json_ops::JsonOps::instance());
-        if json_tree_result.error_ref().is_some() {
-            // TODO(fabric2seer): `new IllegalStateException(..)` outside `throw`
-            //   java: onSaveError(
-            //   java:                     SaveError.ENCODING,
-            //   java:                     new IllegalStateException("Failed to encode: " + jsonTreeResult.error().get().message())
-            //   java:             );
+        let json_tree_result: DataResult<Obj> = self.encode_start(&mcrust::com::mojang::serialization::json_ops::JsonOps::instance());
+        if let Some(error) = json_tree_result.error_ref() {
+            self.on_save_error(
+                SaveError::Encoding,
+                Some(Throwable::of_class("java.lang.IllegalStateException", Some(format!("Failed to encode: {}", error.message())))),
+            );
             return;
         }
-        let mut json_tree: serde_json::Value = json_tree_result.result().unwrap();
-        // TODO(fabric2seer): `Gson.toJson` (Gson over the generated per-class forms)
-        //   java: String json = gson.toJson(jsonTree);
-        let mut json: String = todo!("fabric2seer: the initialiser of `json` (TODO above)");
-        // java: try {..} catch (IOException e) - an exception here is a panic, caught by `catch_unwind`
-        let __result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            std::fs::write(&self.json_file_codec_config_base().config_path, &json).expect("IOException");
-        }));
-        if let Err(e) = __result {
-            self.on_save_error(SaveError::Writing, Some(e.clone()));
+
+        let json_tree: Obj = json_tree_result.result().expect("NoSuchElementException: No value present");
+        // java: String json = gson.toJson(jsonTree);
+        let json: String = compat::gson_text(&compat::GsonValue::of_json(&compat::json_from_port(&json_tree)), self.gson().pretty);
+
+        // java: Files.writeString(configPath, json, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.CREATE);
+        if let Err(e) = std::fs::write(&self.json_file_codec_config_base().config_path, &json) {
+            self.on_save_error(SaveError::Writing, Some(Throwable::of_class("java.io.IOException", Some(e.to_string()))));
         }
     }
 
     /// java: public boolean loadFromFile()
     fn load_from_file(&self) -> bool {
-        if !self.json_file_codec_config_base().config_path.exists() {
+        let config_path = self.json_file_codec_config_base().config_path.clone();
+        if !config_path.exists() {
             return false;
         }
-        let mut json: String;
-        // java: try {..} catch (IOException e) - an exception here is a panic, caught by `catch_unwind`
-        let __result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            json = std::fs::read_to_string(&self.json_file_codec_config_base().config_path).expect("IOException");
-        }));
-        if let Err(e) = __result {
-            self.on_load_error(LoadError::Reading, Some(e.clone()));
-            return false;
-        }
-        let mut json_tree: serde_json::Value;
-        // java: try {..} catch (JsonParseException e) - an exception here is a panic, caught by `catch_unwind`
-        let __result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            json_tree = serde_json::from_str::<serde_json::Value>(&json).expect("JsonSyntaxException");
-        }));
-        if let Err(e) = __result {
-            self.on_load_error(LoadError::JsonParsing, Some(e.clone()));
-            return false;
-        }
-        return self.decode(&json_tree, &mcrust::com::mojang::serialization::json_ops::JsonOps::instance());
+
+        let json: String = match std::fs::read_to_string(&config_path) {
+            Ok(json) => json,
+            Err(e) => {
+                self.on_load_error(LoadError::Reading, Some(Throwable::of_class("java.io.IOException", Some(e.to_string()))));
+                return false;
+            }
+        };
+
+        // java: JsonParser.parseString(json) - Gson's lenient parse
+        let json_tree: serde_json::Value = match gson_config_serializer::parse_lenient(&json) {
+            Ok(json_tree) => json_tree,
+            Err(e) => {
+                self.on_load_error(LoadError::JsonParsing, Some(Throwable::of_class("com.google.gson.JsonParseException", Some(e))));
+                return false;
+            }
+        };
+
+        self.decode_r_dynamic_ops(&compat::json_to_port(&json_tree), &mcrust::com::mojang::serialization::json_ops::JsonOps::instance())
     }
 
     /// java: protected Gson createGson()
     fn create_gson(&self) -> compat::Gson {
-        return compat::GsonBuilder::new().set_pretty_printing().create();
+        compat::GsonBuilder::new().set_pretty_printing().create()
     }
 
     /// java: protected void onSaveError(SaveError error, @Nullable Throwable e)
-    fn on_save_error(&self, mut error: SaveError, mut e: Option<Throwable>) {
-        panic!("IllegalStateException: {}", format!("Error whilst {}", error.name().to_lowercase()).to_string());
+    fn on_save_error(&self, error: SaveError, e: Option<Throwable>) {
+        panic!(
+            "IllegalStateException: Error whilst {}{}",
+            error.name().to_lowercase(),
+            e.and_then(|e| e.get_message().map(|m| format!(" (caused by: {})", m))).unwrap_or_default()
+        );
     }
 
     /// java: protected void onLoadError(LoadError error, @Nullable Throwable e)
-    fn on_load_error(&self, mut error: LoadError, mut e: Option<Throwable>) {
-        panic!("IllegalStateException: {}", format!("Error whilst {}", error.name().to_lowercase()).to_string());
+    fn on_load_error(&self, error: LoadError, e: Option<Throwable>) {
+        panic!(
+            "IllegalStateException: Error whilst {}{}",
+            error.name().to_lowercase(),
+            e.and_then(|e| e.get_message().map(|m| format!(" (caused by: {})", m))).unwrap_or_default()
+        );
     }
-
 }
 
 /// java: protected enum SaveError
@@ -153,7 +153,6 @@ impl SaveError {
             _ => panic!("IllegalArgumentException: No enum constant SaveError.{name}"),
         }
     }
-
 }
 
 impl std::fmt::Display for SaveError {
@@ -201,7 +200,6 @@ impl LoadError {
             _ => panic!("IllegalArgumentException: No enum constant LoadError.{name}"),
         }
     }
-
 }
 
 impl std::fmt::Display for LoadError {

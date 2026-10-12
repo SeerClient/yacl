@@ -1,11 +1,10 @@
-//! Ported from dev.isxander.yacl3.impl.GenericBindingImpl by fabric2seer.
+//! Ported from dev.isxander.yacl3.impl.GenericBindingImpl.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::binding::Binding;
 
 /// java: public final class GenericBindingImpl<T> implements Binding<T>
-#[derive(Clone)]
 pub struct GenericBindingImpl<T> {
     /// java: private final T def;
     pub def: T,
@@ -17,38 +16,24 @@ pub struct GenericBindingImpl<T> {
 
 impl<T: Clone + 'static> GenericBindingImpl<T> {
     /// java: public GenericBindingImpl(T def, Supplier<T> getter, Consumer<T> setting)
-    pub fn new(mut def: T, getter: Arc<dyn Fn() -> T>, setting: Arc<dyn Fn(T)>) -> Self {
-        let __init_def = def.clone();
-        let __init_getter = getter.clone();
-        let __init_setter = setting.clone();
-        let mut this = Self {
-            def: __init_def,
-            getter: __init_getter,
-            setter: __init_setter,
-        };
-        this
+    pub fn new(def: T, getter: Arc<dyn Fn() -> T>, setting: Arc<dyn Fn(T)>) -> Self {
+        Self { def, getter, setter: setting }
     }
-
 }
 
 impl<T: Clone + 'static> Binding<T> for GenericBindingImpl<T> {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     /// java: @Override public void setValue(T value)
-    fn set_value(&mut self, mut value: T) {
-        (self.setter)(value.clone());
+    fn set_value(&self, value: T) {
+        (self.setter)(value);
     }
 
     /// java: @Override public T getValue()
     fn get_value(&self) -> T {
-        return (self.getter)();
+        (self.getter)()
     }
 
     /// java: @Override public T defaultValue()
     fn default_value(&self) -> T {
-        return self.def.clone();
+        self.def.clone()
     }
-
 }

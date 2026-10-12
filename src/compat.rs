@@ -3172,3 +3172,1174 @@ pub fn category(id: &str) -> mcrust::net::minecraft::client::key_mapping::Catego
         crate::prelude::key_binding_helper::register_category(id).unwrap_or(Category::Misc)
     })
 }
+
+// =====================================================================================================================
+// YACL (batch Y2): the pieces of the game's GUI the YACL screen draws and dispatches ITSELF.
+//
+// YACL's screen keeps every widget it shows as its own object (`Arc<..>`, state in cells) and runs Java's
+// `ContainerEventHandler` / `AbstractSelectionList` bodies over them from its `ModScreen` methods, which the game lends
+// the `Screen` and the frame's draw context. Nothing YACL builds is registered in the game's widget list (except the
+// cursor sink below), so a listener that reaches a widget while another one is mid-event never meets a borrow the game
+// holds (PATTERNS_Y2.md P1-P3).
+// =====================================================================================================================
+
+/// `minecraft.execute(task)` for a task that holds the mod's objects (not `Send`): Java's `BlockableEventLoop.execute`
+/// - inline on the render thread outside a running task, else queued for it (`game::execute`).
+pub fn execute_local(task: impl FnOnce() + 'static) {
+    let cell: RenderThread<std::cell::RefCell<Option<Box<dyn FnOnce()>>>> =
+        RenderThread::new(std::cell::RefCell::new(Some(Box::new(task))));
+    mcrust::mcrust::modding::game::execute(move || {
+        let task = cell.get().borrow_mut().take();
+        if let Some(task) = task {
+            task();
+        }
+    });
+}
+
+/// A `CompletableFuture<T>` over the mod's own objects, which are not `Send` (the port's `CompletableFuture` needs
+/// `Send` values). It is completed and continued on the render thread.
+pub struct LocalFuture<T: 'static> {
+    state: std::rc::Rc<std::cell::RefCell<LocalFutureState<T>>>,
+}
+
+struct LocalFutureState<T> {
+    result: Option<Result<T, String>>,
+    callbacks: Vec<Box<dyn FnOnce(&Result<T, String>)>>,
+}
+
+impl<T: 'static> Clone for LocalFuture<T> {
+    fn clone(&self) -> Self {
+        LocalFuture { state: self.state.clone() }
+    }
+}
+
+impl<T: 'static> PartialEq for LocalFuture<T> {
+    /// `CompletableFuture.equals` is identity.
+    fn eq(&self, other: &Self) -> bool {
+        std::rc::Rc::ptr_eq(&self.state, &other.state)
+    }
+}
+
+impl<T: Clone + 'static> LocalFuture<T> {
+    /// `new CompletableFuture<>()`
+    pub fn new() -> LocalFuture<T> {
+        LocalFuture { state: std::rc::Rc::new(std::cell::RefCell::new(LocalFutureState { result: None, callbacks: Vec::new() })) }
+    }
+
+    /// `CompletableFuture.completedFuture(value)`
+    pub fn completed_future(value: T) -> LocalFuture<T> {
+        let future = LocalFuture::new();
+        future.complete(value);
+        future
+    }
+
+    fn finish(&self, result: Result<T, String>) -> bool {
+        let callbacks = {
+            let mut state = self.state.borrow_mut();
+            if state.result.is_some() {
+                return false;
+            }
+            state.result = Some(result);
+            std::mem::take(&mut state.callbacks)
+        };
+        let result = self.state.borrow().result.clone().expect("completed above");
+        for callback in callbacks {
+            callback(&result);
+        }
+        true
+    }
+
+    /// `complete(value)`
+    pub fn complete(&self, value: T) -> bool {
+        self.finish(Ok(value))
+    }
+
+    /// `completeExceptionally(ex)`
+    pub fn complete_exceptionally(&self, error: String) -> bool {
+        self.finish(Err(error))
+    }
+
+    /// `isDone()`
+    pub fn is_done(&self) -> bool {
+        self.state.borrow().result.is_some()
+    }
+
+    /// `getNow(valueIfAbsent)` (an exceptional completion is the `CompletionException` panic)
+    pub fn get_now(&self, value_if_absent: T) -> T {
+        match self.state.borrow().result.clone() {
+            None => value_if_absent,
+            Some(Ok(v)) => v,
+            Some(Err(e)) => panic!("CompletionException: {e}"),
+        }
+    }
+
+    /// `join()` of a completed future (the render thread cannot wait for itself: an incomplete one panics)
+    pub fn join(&self) -> T {
+        match self.state.borrow().result.clone() {
+            None => panic!("LocalFuture.join() on the render thread before the future completed"),
+            Some(Ok(v)) => v,
+            Some(Err(e)) => panic!("CompletionException: {e}"),
+        }
+    }
+
+    fn on_complete(&self, callback: impl FnOnce(&Result<T, String>) + 'static) {
+        let done = self.state.borrow().result.clone();
+        match done {
+            Some(result) => callback(&result),
+            None => self.state.borrow_mut().callbacks.push(Box::new(callback)),
+        }
+    }
+
+    /// `thenApply(fn)`: on the thread that completes this one (the render thread).
+    pub fn then_apply<U: Clone + 'static>(&self, f: impl FnOnce(T) -> U + 'static) -> LocalFuture<U> {
+        let next = LocalFuture::<U>::new();
+        let target = next.clone();
+        self.on_complete(move |result| match result.clone() {
+            Ok(v) => {
+                target.complete(f(v));
+            }
+            Err(e) => {
+                target.complete_exceptionally(e);
+            }
+        });
+        next
+    }
+
+    /// `thenAccept(action)`
+    pub fn then_accept(&self, f: impl FnOnce(T) + 'static) {
+        self.on_complete(move |result| {
+            if let Ok(v) = result.clone() {
+                f(v);
+            }
+        });
+    }
+}
+
+/// Java's `Screen` reference handed to `Minecraft.setScreen(..)` by a mod (`GuiUtils.setScreen`): the port keeps the
+/// screen stack in the client loop, so the reference names WHICH screen - a new mod screen (with or without the screen
+/// that is up as its parent), the parent the open screen holds, or `null`.
+pub enum ScreenRef {
+    /// `null`
+    Null,
+    /// the screen the open one holds as its parent (`setScreen(this.parent)`)
+    Parent,
+    /// `Minecraft.getInstance().screen` handed to a new screen's constructor as its parent
+    Current,
+    /// `new MyScreen(..)`; `keep_parent` when its constructor keeps the screen that is up
+    Mod { screen: Box<dyn mcrust::mcrust::modding::screens::ModScreen>, keep_parent: bool },
+}
+
+impl ScreenRef {
+    /// `new MyScreen(..)` with no parent.
+    pub fn new(screen: impl mcrust::mcrust::modding::screens::ModScreen + 'static) -> ScreenRef {
+        ScreenRef::Mod { screen: Box::new(screen), keep_parent: false }
+    }
+
+    /// `new MyScreen(minecraft.screen)`.
+    pub fn new_keeping_parent(screen: impl mcrust::mcrust::modding::screens::ModScreen + 'static) -> ScreenRef {
+        ScreenRef::Mod { screen: Box::new(screen), keep_parent: true }
+    }
+
+    /// A screen built as a `Box` already.
+    pub fn of_box(screen: Box<dyn mcrust::mcrust::modding::screens::ModScreen>, keep_parent: bool) -> ScreenRef {
+        ScreenRef::Mod { screen, keep_parent }
+    }
+
+    /// `minecraft.setScreen(this)`.
+    pub fn set(self) {
+        use mcrust::mcrust::modding::game;
+        match self {
+            ScreenRef::Null => game::set_screen_null(),
+            // `setScreen(parent)` where the parent is the screen that is up: nothing changes
+            ScreenRef::Current => {}
+            ScreenRef::Parent => game::set_screen_to_parent(),
+            ScreenRef::Mod { screen, keep_parent: true } => game::set_screen_keeping_parent(screen),
+            ScreenRef::Mod { screen, keep_parent: false } => game::set_screen(screen),
+        }
+    }
+}
+
+/// `java.lang.Enum` for a mod enum handed to YACL as a value type (`EnumController`, `CyclingListController` over
+/// `getEnumConstants()`): its constants in declaration order, `ordinal()`, `name()`, and `instanceof NameableEnum`.
+pub trait JavaEnum: Clone + PartialEq + 'static {
+    /// `enumClass.getEnumConstants()`
+    fn enum_constants() -> Vec<Self>;
+    /// `ordinal()`
+    fn ordinal(&self) -> i32;
+    /// `name()`
+    fn name(&self) -> String;
+    /// `this instanceof NameableEnum n ? n.getDisplayName() : null`
+    fn nameable_display_name(&self) -> Option<mcrust::net::minecraft::network::chat::mutable_component::MutableComponent> {
+        None
+    }
+}
+
+/// `Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(event, 1.0F))` from mod code.
+/// rust: port gap (GAPS_Y2.md G3) - the sound engine is a local of the frame loop; a mod has no way to play a UI sound
+/// outside the game's own click sweep. The request is dropped (logged once).
+pub fn play_ui_sound(event: &mcrust::net::minecraft::sounds::sound_event::SoundEvent) {
+    let _ = event;
+    mcrust::mcrust::modding::log::warn_once(
+        "yacl.play_ui_sound",
+        "YACL: a UI sound was requested from mod code; the port has no mod-side sound player yet (GAPS_Y2 G3)",
+    );
+}
+
+/// `AbstractWidget.playDownSound` - `UI_BUTTON_CLICK`.
+pub fn play_down_sound() {
+    play_ui_sound(mcrust::net::minecraft::sounds::sound_events::ui_button_click());
+}
+
+/// `Minecraft.getInstance().keyboardHandler.getClipboard()`.
+pub fn get_clipboard() -> String {
+    use mcrust::net::minecraft::client::gui::components::edit_box::ClipboardAccess;
+    match mcrust::net::minecraft::client::minecraft::GlfwClipboard::published() {
+        Some(mut clipboard) => clipboard.get_clipboard(),
+        None => String::new(),
+    }
+}
+
+/// `Minecraft.getInstance().keyboardHandler.setClipboard(value)`.
+pub fn set_clipboard(value: &str) {
+    use mcrust::net::minecraft::client::gui::components::edit_box::ClipboardAccess;
+    if let Some(mut clipboard) = mcrust::net::minecraft::client::minecraft::GlfwClipboard::published() {
+        clipboard.set_clipboard(value);
+    }
+}
+
+/// `com.mojang.blaze3d.platform.cursor.CursorTypes` as a mod names one (`graphics.requestCursor(CursorTypes.IBEAM)`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CursorKind {
+    Arrow,
+    IBeam,
+    Crosshair,
+    PointingHand,
+    ResizeNs,
+    ResizeEw,
+    ResizeAll,
+    NotAllowed,
+}
+
+thread_local! {
+    /// The cursor the mod screen's last extract asked for (`graphics.requestCursor(..)`), answered to the window by the
+    /// cursor sink widget after the frame.
+    static REQUESTED_CURSOR: std::cell::Cell<Option<CursorKind>> = const { std::cell::Cell::new(None) };
+}
+
+/// The game asks every renderable widget of the open screen for its cursor after the frame (window.rs); a mod screen
+/// that draws its own widgets requests its cursor through this one, a zero-size widget that answers what the screen's
+/// extract asked for (`GuiGraphicsExtractor.requestCursor`). Add it in `init` (`cursor_sink_widget()`).
+pub struct CursorSink;
+
+impl mcrust::mcrust::modding::widgets::ModWidget for CursorSink {
+    fn extract_widget_render_state(
+        &mut self,
+        _widget: &mcrust::net::minecraft::client::gui::components::abstract_widget::AbstractWidget,
+        _context: &mut mcrust::mcrust::modding::widgets::WidgetRenderContext<'_>,
+        _mouse_x: i32,
+        _mouse_y: i32,
+        _a: f32,
+    ) {
+    }
+
+    fn update_widget_narration(
+        &mut self,
+        _widget: &mcrust::net::minecraft::client::gui::components::abstract_widget::AbstractWidget,
+        _output: &mut dyn mcrust::net::minecraft::client::gui::narration::narration_element_output::NarrationElementOutput,
+    ) {
+    }
+
+    fn is_mouse_over(
+        &self,
+        _widget: &mcrust::net::minecraft::client::gui::components::abstract_widget::AbstractWidget,
+        _mouse_x: f64,
+        _mouse_y: f64,
+    ) -> bool {
+        false
+    }
+
+    fn handle_cursor(
+        &self,
+        _widget: &mcrust::net::minecraft::client::gui::components::abstract_widget::AbstractWidget,
+        cursors: &mcrust::com::mojang::blaze3d::platform::cursor::cursor_types::CursorTypes,
+    ) -> Option<mcrust::com::mojang::blaze3d::platform::cursor::cursor_type::CursorType> {
+        let kind = REQUESTED_CURSOR.with(|c| c.get())?;
+        Some(match kind {
+            CursorKind::Arrow => cursors.arrow,
+            CursorKind::IBeam => cursors.ibeam,
+            CursorKind::Crosshair => cursors.crosshair,
+            CursorKind::PointingHand => cursors.pointing_hand,
+            CursorKind::ResizeNs => cursors.resize_ns,
+            CursorKind::ResizeEw => cursors.resize_ew,
+            CursorKind::ResizeAll => cursors.resize_all,
+            CursorKind::NotAllowed => cursors.not_allowed,
+        })
+    }
+}
+
+/// The cursor sink as the game's widget (add it with `screen.add_renderable_widget(..)`).
+pub fn cursor_sink_widget() -> mcrust::net::minecraft::client::gui::components::abstract_widget::AbstractWidget {
+    let mut w = mcrust::mcrust::modding::widgets::ModWidgetSlot::widget(-1, -1, 0, 0, String::new(), Box::new(CursorSink));
+    w.active = false;
+    w
+}
+
+/// Java's `GuiGraphicsExtractor graphics` handed to the YACL screen's widgets: the frame's extractor with the GL handle
+/// and the `Minecraft` this port's draw functions take, and Java's method names.
+pub struct Graphics<'a> {
+    pub gl: &'a mcrust::lwjgl::opengl::Gl,
+    pub mc: &'a mcrust::net::minecraft::client::minecraft::Minecraft,
+    pub extractor: mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor,
+    poses: std::cell::RefCell<Vec<mcrust::org::joml::matrix3x2f::Matrix3x2f>>,
+}
+
+impl<'a> Graphics<'a> {
+    pub fn new(gl: &'a mcrust::lwjgl::opengl::Gl, mc: &'a mcrust::net::minecraft::client::minecraft::Minecraft) -> Graphics<'a> {
+        REQUESTED_CURSOR.with(|c| c.set(None));
+        Graphics {
+            gl,
+            mc,
+            extractor: mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor::new(),
+            poses: std::cell::RefCell::new(Vec::new()),
+        }
+    }
+
+    /// `graphics.guiWidth()`
+    pub fn gui_width(&self) -> i32 {
+        self.mc.window.get_gui_scaled_width()
+    }
+
+    /// `graphics.guiHeight()`
+    pub fn gui_height(&self) -> i32 {
+        self.mc.window.get_gui_scaled_height()
+    }
+
+    /// The same frame as a `WidgetRenderContext`, for drawing the game's own widgets (`ButtonLook`).
+    pub fn widget_context(&self) -> mcrust::mcrust::modding::widgets::WidgetRenderContext<'a> {
+        mcrust::mcrust::modding::widgets::WidgetRenderContext::new(self.gl, self.mc)
+    }
+
+    /// `graphics.fill(x0, y0, x1, y1, color)`
+    pub fn fill(&self, x0: i32, y0: i32, x1: i32, y1: i32, color: i32) {
+        self.extractor.fill(self.gl, x0, y0, x1, y1, color);
+    }
+
+    /// `graphics.fillGradient(x0, y0, x1, y1, col1, col2)`
+    pub fn fill_gradient(&self, x0: i32, y0: i32, x1: i32, y1: i32, col1: i32, col2: i32) {
+        self.extractor.fill_gradient(self.gl, x0, y0, x1, y1, col1, col2);
+    }
+
+    /// `graphics.outline(x, y, width, height, color)`
+    pub fn outline(&self, x: i32, y: i32, width: i32, height: i32, color: i32) {
+        self.fill(x, y, x + width, y + 1, color);
+        self.fill(x, y + height - 1, x + width, y + height, color);
+        self.fill(x, y + 1, x + 1, y + height - 1, color);
+        self.fill(x + width - 1, y + 1, x + width, y + height - 1, color);
+    }
+
+    /// `graphics.text(font, text, x, y, color, dropShadow)`
+    pub fn text(&self, text: &mcrust::net::minecraft::network::chat::formatted_text::FormattedText, x: i32, y: i32, color: i32, drop_shadow: bool) {
+        mcrust::net::minecraft::client::gui::gui_graphics_extractor::draw_formatted_text_with_drop_shadow(self.gl, self.mc, text, x, y, color, drop_shadow);
+    }
+
+    /// `graphics.text(font, component, x, y, color, dropShadow)`
+    pub fn text_component(&self, text: &mcrust::net::minecraft::network::chat::mutable_component::MutableComponent, x: i32, y: i32, color: i32, drop_shadow: bool) {
+        let text = mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(text.clone());
+        self.text(&text, x, y, color, drop_shadow);
+    }
+
+    /// `graphics.text(font, string, x, y, color, dropShadow)`
+    pub fn text_str(&self, text: &str, x: i32, y: i32, color: i32, drop_shadow: bool) {
+        mcrust::net::minecraft::client::gui::gui_graphics_extractor::text_string_with_drop_shadow(self.gl, self.mc, Some(text), x, y, color, drop_shadow);
+    }
+
+    /// `graphics.centeredText(font, text, x, y, color)`
+    pub fn centered_text(&self, text: &mcrust::net::minecraft::network::chat::formatted_text::FormattedText, x: i32, y: i32, color: i32) {
+        mcrust::net::minecraft::client::gui::gui_graphics_extractor::centered_text(self.gl, self.mc, text, x, y, color);
+    }
+
+    /// `graphics.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, x, y, width, height)`
+    pub fn blit_sprite(&self, sprite: &mcrust::net::minecraft::resources::identifier::Identifier, x: i32, y: i32, width: i32, height: i32) {
+        mcrust::net::minecraft::client::gui::gui_graphics_extractor::blit_sprite_identifier(
+            self.gl,
+            self.mc,
+            mcrust::net::minecraft::client::renderer::render_pipelines::gui_textured(),
+            sprite,
+            x,
+            y,
+            width,
+            height,
+        );
+    }
+
+    /// `graphics.blitSprite(RenderPipelines.GUI_TEXTURED, sprite, x, y, width, height, color)`
+    pub fn blit_sprite_with_color(&self, sprite: &mcrust::net::minecraft::resources::identifier::Identifier, x: i32, y: i32, width: i32, height: i32, color: i32) {
+        mcrust::net::minecraft::client::gui::gui_graphics_extractor::blit_sprite_identifier_with_color(
+            self.gl,
+            self.mc,
+            mcrust::net::minecraft::client::renderer::render_pipelines::gui_textured(),
+            sprite,
+            x,
+            y,
+            width,
+            height,
+            color,
+        );
+    }
+
+    /// `graphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, width, height, textureWidth, textureHeight)`
+    #[allow(clippy::too_many_arguments)]
+    pub fn blit(
+        &self,
+        texture: &mcrust::net::minecraft::resources::identifier::Identifier,
+        x: i32,
+        y: i32,
+        u: f32,
+        v: f32,
+        width: i32,
+        height: i32,
+        texture_width: i32,
+        texture_height: i32,
+    ) {
+        mcrust::net::minecraft::client::gui::gui_graphics_extractor::blit_identifier(
+            self.gl,
+            self.mc,
+            mcrust::net::minecraft::client::renderer::render_pipelines::gui_textured(),
+            texture,
+            x,
+            y,
+            u,
+            v,
+            width,
+            height,
+            texture_width,
+            texture_height,
+        );
+    }
+
+    /// `graphics.enableScissor(x0, y0, x1, y1)`
+    pub fn enable_scissor(&self, x0: i32, y0: i32, x1: i32, y1: i32) {
+        self.extractor.enable_scissor(x0, y0, x1, y1);
+    }
+
+    /// `graphics.disableScissor()`
+    pub fn disable_scissor(&self) {
+        self.extractor.disable_scissor();
+    }
+
+    /// `graphics.pose().pushMatrix()`
+    pub fn push_pose(&self) {
+        let saved = mcrust::net::minecraft::client::gui::gui_graphics_extractor::push_pose();
+        self.poses.borrow_mut().push(saved);
+    }
+
+    /// `graphics.pose().popMatrix()`
+    pub fn pop_pose(&self) {
+        let saved = self.poses.borrow_mut().pop().expect("graphics.pose().popMatrix() with no matching pushMatrix()");
+        mcrust::net::minecraft::client::gui::gui_graphics_extractor::pop_pose(saved);
+    }
+
+    /// `graphics.pose().translate(x, y)`
+    pub fn translate(&self, x: f32, y: f32) {
+        mcrust::net::minecraft::client::gui::gui_graphics_extractor::pose_translate(x, y);
+    }
+
+    /// `graphics.pose().scale(x, y)`
+    pub fn scale(&self, x: f32, y: f32) {
+        mcrust::net::minecraft::client::gui::gui_graphics_extractor::pose_scale(x, y);
+    }
+
+    /// `graphics.pose().rotate(angle)` (radians)
+    pub fn rotate(&self, angle: f32) {
+        mcrust::net::minecraft::client::gui::gui_graphics_extractor::pose_rotate(angle);
+    }
+
+    /// `graphics.item(stack, x, y)`
+    pub fn item(&self, stack: &mcrust::net::minecraft::world::item::item_stack::ItemStack, x: i32, y: i32) {
+        self.extractor.item(stack, x, y);
+    }
+
+    /// `graphics.requestCursor(cursor)`
+    pub fn request_cursor(&self, cursor: CursorKind) {
+        REQUESTED_CURSOR.with(|c| c.set(Some(cursor)));
+    }
+}
+
+impl Drop for Graphics<'_> {
+    fn drop(&mut self) {
+        // a pose a widget pushed and forgot (an unwind) is popped for it
+        for saved in self.poses.borrow_mut().drain(..).rev() {
+            mcrust::net::minecraft::client::gui::gui_graphics_extractor::pop_pose(saved);
+        }
+    }
+}
+
+/// Java's `GuiEventListener` + `Renderable` for an object the mod dispatches itself (the YACL screen's buttons, edit box,
+/// list and YACL's own widgets). Every default body is `GuiEventListener.java`'s. Methods take `&self`: the object keeps
+/// its state in cells, so a listener it fires can reach it again.
+pub trait GuiEventListener {
+    /// `Renderable.extractRenderState(graphics, mouseX, mouseY, a)`
+    fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32);
+
+    /// `mouseClicked(event, doubleClick)` - `false`.
+    fn mouse_clicked(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent, double_click: bool) -> bool {
+        let _ = (event, double_click);
+        false
+    }
+
+    /// `mouseReleased(event)` - `false`.
+    fn mouse_released(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent) -> bool {
+        let _ = event;
+        false
+    }
+
+    /// `mouseDragged(event, dx, dy)` - `false`.
+    fn mouse_dragged(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent, dx: f64, dy: f64) -> bool {
+        let _ = (event, dx, dy);
+        false
+    }
+
+    /// `mouseScrolled(x, y, scrollX, scrollY)` - `false`.
+    fn mouse_scrolled(&self, x: f64, y: f64, scroll_x: f64, scroll_y: f64) -> bool {
+        let _ = (x, y, scroll_x, scroll_y);
+        false
+    }
+
+    /// `mouseMoved(x, y)` - empty.
+    fn mouse_moved(&self, x: f64, y: f64) {
+        let _ = (x, y);
+    }
+
+    /// `keyPressed(event)` - `false`.
+    fn key_pressed(&self, event: &mcrust::net::minecraft::client::input::key_event::KeyEvent) -> bool {
+        let _ = event;
+        false
+    }
+
+    /// `charTyped(event)` - `false`.
+    fn char_typed(&self, event: &mcrust::net::minecraft::client::input::character_event::CharacterEvent) -> bool {
+        let _ = event;
+        false
+    }
+
+    /// `isMouseOver(x, y)` - `false`.
+    fn is_mouse_over(&self, x: f64, y: f64) -> bool {
+        let _ = (x, y);
+        false
+    }
+
+    /// `setFocused(boolean)`
+    fn set_focused(&self, focused: bool);
+
+    /// `isFocused()`
+    fn is_focused(&self) -> bool;
+
+    /// `shouldTakeFocusAfterInteraction()` - `true`.
+    fn should_take_focus_after_interaction(&self) -> bool {
+        true
+    }
+}
+
+/// `AbstractContainerEventHandler`'s two fields (`focused`, `isDragging`) and `ContainerEventHandler`'s default bodies,
+/// over the children the owner hands in (its `children()`). Identity is the `Arc`'s.
+#[derive(Default)]
+pub struct ContainerEventHandler {
+    focused: std::cell::RefCell<Option<std::sync::Arc<dyn GuiEventListener>>>,
+    dragging: std::cell::Cell<bool>,
+}
+
+impl ContainerEventHandler {
+    pub fn new() -> ContainerEventHandler {
+        ContainerEventHandler::default()
+    }
+
+    /// `getFocused()`
+    pub fn get_focused(&self) -> Option<std::sync::Arc<dyn GuiEventListener>> {
+        self.focused.borrow().clone()
+    }
+
+    /// `AbstractContainerEventHandler.setFocused(GuiEventListener)`
+    pub fn set_focused(&self, focused: Option<std::sync::Arc<dyn GuiEventListener>>) {
+        let current = self.focused.borrow().clone();
+        let same = match (&current, &focused) {
+            (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
+            (None, None) => true,
+            _ => false,
+        };
+        if !same {
+            if let Some(current) = current {
+                current.set_focused(false);
+            }
+            if let Some(focused) = &focused {
+                focused.set_focused(true);
+            }
+            *self.focused.borrow_mut() = focused;
+        }
+    }
+
+    /// `isDragging()`
+    pub fn is_dragging(&self) -> bool {
+        self.dragging.get()
+    }
+
+    /// `setDragging(boolean)`
+    pub fn set_dragging(&self, dragging: bool) {
+        self.dragging.set(dragging);
+    }
+
+    /// `getChildAt(x, y)`
+    pub fn get_child_at(children: &[std::sync::Arc<dyn GuiEventListener>], x: f64, y: f64) -> Option<std::sync::Arc<dyn GuiEventListener>> {
+        children.iter().find(|child| child.is_mouse_over(x, y)).cloned()
+    }
+
+    /// `ContainerEventHandler.mouseClicked:39-55`
+    pub fn mouse_clicked(
+        &self,
+        children: &[std::sync::Arc<dyn GuiEventListener>],
+        event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent,
+        double_click: bool,
+    ) -> bool {
+        let Some(widget) = ContainerEventHandler::get_child_at(children, event.x(), event.y()) else {
+            return false;
+        };
+        if widget.mouse_clicked(event, double_click) && widget.should_take_focus_after_interaction() {
+            self.set_focused(Some(widget));
+            if event.button() == 0 {
+                self.set_dragging(true);
+            }
+        }
+        true
+    }
+
+    /// `ContainerEventHandler.mouseReleased:57-66`
+    pub fn mouse_released(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent) -> bool {
+        if event.button() == 0 && self.is_dragging() {
+            self.set_dragging(false);
+            if let Some(focused) = self.get_focused() {
+                return focused.mouse_released(event);
+            }
+        }
+        false
+    }
+
+    /// `ContainerEventHandler.mouseDragged:68-71`
+    pub fn mouse_dragged(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent, dx: f64, dy: f64) -> bool {
+        match self.get_focused() {
+            Some(focused) if self.is_dragging() && event.button() == 0 => focused.mouse_dragged(event, dx, dy),
+            _ => false,
+        }
+    }
+
+    /// `ContainerEventHandler.mouseScrolled:74-78`
+    pub fn mouse_scrolled(children: &[std::sync::Arc<dyn GuiEventListener>], x: f64, y: f64, scroll_x: f64, scroll_y: f64) -> bool {
+        ContainerEventHandler::get_child_at(children, x, y).is_some_and(|child| child.mouse_scrolled(x, y, scroll_x, scroll_y))
+    }
+
+    /// `ContainerEventHandler.keyPressed:82-85`
+    pub fn key_pressed(&self, event: &mcrust::net::minecraft::client::input::key_event::KeyEvent) -> bool {
+        self.get_focused().is_some_and(|focused| focused.key_pressed(event))
+    }
+
+    /// `ContainerEventHandler.charTyped:92-95`
+    pub fn char_typed(&self, event: &mcrust::net::minecraft::client::input::character_event::CharacterEvent) -> bool {
+        self.get_focused().is_some_and(|focused| focused.char_typed(event))
+    }
+
+    /// `ContainerEventHandler.setFocused(boolean)` - `if (!focused) setFocused(null)`.
+    pub fn set_focused_boolean(&self, focused: bool) {
+        if !focused {
+            self.set_focused(None);
+        }
+    }
+
+    /// `ContainerEventHandler.isFocused()` - `getFocused() != null`.
+    pub fn is_focused(&self) -> bool {
+        self.focused.borrow().is_some()
+    }
+}
+
+/// `net.minecraft.client.gui.components.AbstractWidget`'s fields, for a game widget class the mod draws itself
+/// (`Button`, the YACL description pane, the tab bar): Java's `x`, `y`, `width`, `height`, `message`, `active`, `visible`,
+/// `alpha`, `isHovered`, `focused` and the tooltip, in cells.
+pub struct WidgetFields {
+    pub x: std::cell::Cell<i32>,
+    pub y: std::cell::Cell<i32>,
+    pub width: std::cell::Cell<i32>,
+    pub height: std::cell::Cell<i32>,
+    pub message: std::cell::RefCell<mcrust::net::minecraft::network::chat::mutable_component::MutableComponent>,
+    pub active: std::cell::Cell<bool>,
+    pub visible: std::cell::Cell<bool>,
+    pub alpha: std::cell::Cell<f32>,
+    pub is_hovered: std::cell::Cell<bool>,
+    pub focused: std::cell::Cell<bool>,
+    /// `setTooltip(Tooltip)` - the tooltip's text.
+    pub tooltip: std::cell::RefCell<Option<mcrust::net::minecraft::network::chat::mutable_component::MutableComponent>>,
+}
+
+impl WidgetFields {
+    /// `AbstractWidget(x, y, width, height, message)`
+    pub fn new(x: i32, y: i32, width: i32, height: i32, message: mcrust::net::minecraft::network::chat::mutable_component::MutableComponent) -> WidgetFields {
+        WidgetFields {
+            x: std::cell::Cell::new(x),
+            y: std::cell::Cell::new(y),
+            width: std::cell::Cell::new(width),
+            height: std::cell::Cell::new(height),
+            message: std::cell::RefCell::new(message),
+            active: std::cell::Cell::new(true),
+            visible: std::cell::Cell::new(true),
+            alpha: std::cell::Cell::new(1.0),
+            is_hovered: std::cell::Cell::new(false),
+            focused: std::cell::Cell::new(false),
+            tooltip: std::cell::RefCell::new(None),
+        }
+    }
+
+    pub fn get_x(&self) -> i32 {
+        self.x.get()
+    }
+    pub fn get_y(&self) -> i32 {
+        self.y.get()
+    }
+    pub fn set_x(&self, x: i32) {
+        self.x.set(x);
+    }
+    pub fn set_y(&self, y: i32) {
+        self.y.set(y);
+    }
+    pub fn get_width(&self) -> i32 {
+        self.width.get()
+    }
+    pub fn get_height(&self) -> i32 {
+        self.height.get()
+    }
+    pub fn set_width(&self, width: i32) {
+        self.width.set(width);
+    }
+    pub fn set_height(&self, height: i32) {
+        self.height.set(height);
+    }
+    /// `getRight()`
+    pub fn get_right(&self) -> i32 {
+        self.get_x() + self.get_width()
+    }
+    /// `getBottom()`
+    pub fn get_bottom(&self) -> i32 {
+        self.get_y() + self.get_height()
+    }
+    /// `setMessage(Component)`
+    pub fn set_message(&self, message: mcrust::net::minecraft::network::chat::mutable_component::MutableComponent) {
+        *self.message.borrow_mut() = message;
+    }
+    /// `getMessage()`
+    pub fn get_message(&self) -> mcrust::net::minecraft::network::chat::mutable_component::MutableComponent {
+        self.message.borrow().clone()
+    }
+    /// `setTooltip(Tooltip.create(text))` / `setTooltip(null)`
+    pub fn set_tooltip(&self, tooltip: Option<mcrust::net::minecraft::network::chat::mutable_component::MutableComponent>) {
+        *self.tooltip.borrow_mut() = tooltip;
+    }
+    /// `isActive()` - `visible && active`.
+    pub fn is_active(&self) -> bool {
+        self.visible.get() && self.active.get()
+    }
+    /// `isHovered()`
+    pub fn is_hovered(&self) -> bool {
+        self.is_hovered.get()
+    }
+    /// `isHoveredOrFocused()`
+    pub fn is_hovered_or_focused(&self) -> bool {
+        self.is_hovered() || self.focused.get()
+    }
+    /// `areCoordinatesInRectangle(x, y)`
+    pub fn are_coordinates_in_rectangle(&self, x: f64, y: f64) -> bool {
+        x >= self.get_x() as f64 && y >= self.get_y() as f64 && x < self.get_right() as f64 && y < self.get_bottom() as f64
+    }
+    /// `AbstractWidget.isMouseOver:161-164`
+    pub fn is_mouse_over(&self, x: f64, y: f64) -> bool {
+        self.is_active() && self.are_coordinates_in_rectangle(x, y)
+    }
+    /// `AbstractWidget.extractRenderState:56-62`'s hover test (the pass's scissor is the list's own, applied by the
+    /// caller that clips).
+    pub fn update_hover(&self, mouse_x: i32, mouse_y: i32) {
+        self.is_hovered.set(self.are_coordinates_in_rectangle(mouse_x as f64, mouse_y as f64));
+    }
+}
+
+/// `AbstractButton.extractDefaultSprite(graphics)` + `extractDefaultLabel(..)` - what a plain `Button` draws - for a
+/// button the mod draws itself: a one-widget `Screen` holding a `WidgetKind::Button`, brought up to the mod button's box
+/// and state before each draw, drawn through the game's own button pass. Kept in the object (no allocation per frame
+/// unless the message changed).
+pub struct ButtonLook {
+    screen: std::cell::RefCell<mcrust::net::minecraft::client::gui::screens::screen::Screen>,
+}
+
+impl Default for ButtonLook {
+    fn default() -> ButtonLook {
+        ButtonLook::new()
+    }
+}
+
+impl ButtonLook {
+    pub fn new() -> ButtonLook {
+        use mcrust::net::minecraft::client::gui::components::abstract_widget::{AbstractWidget, OnPress, WidgetKind};
+        let mut screen = mcrust::net::minecraft::client::gui::screens::screen::Screen::new(String::new());
+        screen.add_renderable_widget(AbstractWidget::new(0, 0, 0, 0, String::new(), WidgetKind::Button, OnPress::Inert));
+        ButtonLook { screen: std::cell::RefCell::new(screen) }
+    }
+
+    /// The button drawn over `fields`' box, message (`None`: no label), `active`, `visible`, alpha and focus.
+    pub fn draw(
+        &self,
+        fields: &WidgetFields,
+        message: Option<&mcrust::net::minecraft::network::chat::formatted_text::FormattedText>,
+        graphics: &Graphics<'_>,
+        mouse_x: i32,
+        mouse_y: i32,
+    ) {
+        let mut screen = self.screen.borrow_mut();
+        let b = screen.widget_mut(0);
+        b.set_position(fields.get_x(), fields.get_y());
+        b.width = fields.get_width();
+        b.height = fields.get_height();
+        match message {
+            Some(message) => {
+                if b.message_text.as_ref() != Some(message) {
+                    b.message = message.get_string();
+                    b.message_text = Some(message.clone());
+                }
+            }
+            None => {
+                if !b.message.is_empty() || b.message_text.is_some() {
+                    b.message = String::new();
+                    b.message_text = None;
+                }
+            }
+        }
+        b.active = fields.active.get();
+        b.visible = fields.visible.get();
+        b.alpha = fields.alpha.get();
+        if b.is_focused() != fields.focused.get() {
+            b.set_focused(fields.focused.get(), mcrust::net::minecraft::client::input_type::InputType::None);
+        }
+        graphics.widget_context().extract_widgets(&mut screen, mouse_x, mouse_y);
+    }
+}
+
+/// `net.minecraft.client.gui.components.Button` as a mod screen that draws its own widgets holds one: the fields, the
+/// `OnPress` lambda (handed the button, Java's `b`), and the game's look.
+pub struct Button {
+    pub fields: WidgetFields,
+    on_press: std::cell::RefCell<Option<std::rc::Rc<dyn Fn(&Button)>>>,
+    look: ButtonLook,
+}
+
+impl Button {
+    /// `Button.builder(message, onPress).pos(x, y).size(width, height).build()`
+    pub fn new(
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        message: mcrust::net::minecraft::network::chat::mutable_component::MutableComponent,
+        on_press: impl Fn(&Button) + 'static,
+    ) -> Button {
+        Button {
+            fields: WidgetFields::new(x, y, width, height, message),
+            on_press: std::cell::RefCell::new(Some(std::rc::Rc::new(on_press))),
+            look: ButtonLook::new(),
+        }
+    }
+
+    /// `onPress.onPress(this)` - a lambda installed after construction (Java's builder takes it first).
+    pub fn set_on_press(&self, on_press: impl Fn(&Button) + 'static) {
+        *self.on_press.borrow_mut() = Some(std::rc::Rc::new(on_press));
+    }
+
+    /// `Button.onPress(input)` - `this.onPress.onPress(this)`.
+    pub fn on_press(&self) {
+        let on_press = self.on_press.borrow().clone();
+        if let Some(on_press) = on_press {
+            on_press(self);
+        }
+    }
+
+    /// `AbstractButton.extractWidgetRenderState` - the default sprite and label, with an explicit message (a subclass
+    /// that draws its own label passes `None`).
+    pub fn extract_default(&self, graphics: &Graphics<'_>, message: Option<&mcrust::net::minecraft::network::chat::formatted_text::FormattedText>, mouse_x: i32, mouse_y: i32) {
+        self.look.draw(&self.fields, message, graphics, mouse_x, mouse_y);
+    }
+
+    /// `AbstractButton.handleCursor`: a pointing hand (not allowed when inactive) while hovered.
+    pub fn handle_cursor(&self, graphics: &Graphics<'_>) {
+        if self.fields.is_hovered() {
+            graphics.request_cursor(if self.fields.is_active() { CursorKind::PointingHand } else { CursorKind::NotAllowed });
+        }
+    }
+}
+
+impl GuiEventListener for Button {
+    /// `AbstractWidget.extractRenderState:56-62` -> `AbstractButton.extractWidgetRenderState`.
+    fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, _a: f32) {
+        if !self.fields.visible.get() {
+            return;
+        }
+        self.fields.update_hover(mouse_x, mouse_y);
+        let message = mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(self.fields.get_message());
+        self.extract_default(graphics, Some(&message), mouse_x, mouse_y);
+        self.handle_cursor(graphics);
+    }
+
+    /// `AbstractWidget.mouseClicked:109-125` -> `AbstractButton.onClick` -> `onPress`.
+    fn mouse_clicked(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent, _double_click: bool) -> bool {
+        if !self.fields.is_active() {
+            return false;
+        }
+        if event.button() == 0 && self.is_mouse_over(event.x(), event.y()) {
+            play_down_sound();
+            self.on_press();
+            return true;
+        }
+        false
+    }
+
+    /// `AbstractWidget.mouseReleased:127-135`
+    fn mouse_released(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent) -> bool {
+        event.button() == 0
+    }
+
+    /// `AbstractWidget.mouseDragged:141-149`
+    fn mouse_dragged(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent, _dx: f64, _dy: f64) -> bool {
+        event.button() == 0
+    }
+
+    /// `AbstractButton.keyPressed:61-72` - a selection key presses an active button.
+    fn key_pressed(&self, event: &mcrust::net::minecraft::client::input::key_event::KeyEvent) -> bool {
+        if !self.fields.is_active() {
+            return false;
+        }
+        if event.is_selection() {
+            play_down_sound();
+            self.on_press();
+            return true;
+        }
+        false
+    }
+
+    fn is_mouse_over(&self, x: f64, y: f64) -> bool {
+        self.fields.is_mouse_over(x, y)
+    }
+
+    fn set_focused(&self, focused: bool) {
+        self.fields.focused.set(focused);
+    }
+
+    fn is_focused(&self) -> bool {
+        self.fields.focused.get()
+    }
+}
+
+/// `net.minecraft.client.gui.components.EditBox` as a mod screen that draws its own widgets holds one (a subclass:
+/// `SearchFieldWidget`): the game's `EditBox` state inside a one-widget `Screen` (the game's own draw), the widget's
+/// fields, and the responder - run after an edit has finished (the box's `onValueChange` is the last statement of every
+/// edit), so it may reach this box again.
+pub struct EditBoxWidget {
+    screen: std::cell::RefCell<mcrust::net::minecraft::client::gui::screens::screen::Screen>,
+    responder: std::cell::RefCell<Option<std::rc::Rc<dyn Fn(&str)>>>,
+    focused: std::cell::Cell<bool>,
+}
+
+impl EditBoxWidget {
+    /// `new EditBox(font, x, y, width, height, message)`
+    pub fn new(x: i32, y: i32, width: i32, height: i32, message: mcrust::net::minecraft::network::chat::mutable_component::MutableComponent) -> EditBoxWidget {
+        use mcrust::net::minecraft::client::gui::components::abstract_widget::{AbstractWidget, OnPress, WidgetKind};
+        use mcrust::net::minecraft::network::chat::component::Component as _;
+        let font = font();
+        let edit = mcrust::net::minecraft::client::gui::components::edit_box::EditBox::new(&font.splitter(), x, y, width, height);
+        let mut widget = AbstractWidget::new(x, y, width, height, message.get_string(), WidgetKind::EditBox(edit), OnPress::Inert);
+        widget.message_text = Some(mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(message));
+        let mut screen = mcrust::net::minecraft::client::gui::screens::screen::Screen::new(String::new());
+        screen.add_renderable_widget(widget);
+        EditBoxWidget { screen: std::cell::RefCell::new(screen), responder: std::cell::RefCell::new(None), focused: std::cell::Cell::new(false) }
+    }
+
+    /// The game's widget (its box, `active`, `visible`, message).
+    pub fn with_widget<R>(&self, f: impl FnOnce(&mut mcrust::net::minecraft::client::gui::components::abstract_widget::AbstractWidget) -> R) -> R {
+        let mut screen = self.screen.borrow_mut();
+        f(screen.widget_mut(0))
+    }
+
+    /// The game's `EditBox` state.
+    pub fn with_edit_box<R>(&self, f: impl FnOnce(&mut mcrust::net::minecraft::client::gui::components::edit_box::EditBox) -> R) -> R {
+        self.with_widget(|w| match &mut w.kind {
+            mcrust::net::minecraft::client::gui::components::abstract_widget::WidgetKind::EditBox(e) => f(e),
+            _ => unreachable!("EditBoxWidget holds an EditBox"),
+        })
+    }
+
+    /// `setResponder(responder)`
+    pub fn set_responder(&self, responder: impl Fn(&str) + 'static) {
+        *self.responder.borrow_mut() = Some(std::rc::Rc::new(responder));
+    }
+
+    /// The responder, run for an edit that changed the value (`onValueChange`).
+    fn after_edit(&self, before: &str) {
+        let value = self.get_value();
+        if value != before {
+            let responder = self.responder.borrow().clone();
+            if let Some(responder) = responder {
+                responder(&value);
+            }
+        }
+    }
+
+    /// `getValue()`
+    pub fn get_value(&self) -> String {
+        self.with_edit_box(|e| e.get_value())
+    }
+
+    /// `setValue(value)` - the responder runs (`onValueChange`).
+    pub fn set_value(&self, value: &str) {
+        let before = self.get_value();
+        let font = font();
+        self.with_edit_box(|e| e.set_value(&font.splitter(), value));
+        self.after_edit(&before);
+    }
+
+    /// `setValue(value)` without the responder (`SearchFieldWidget.setValueDoNotUpdate`).
+    pub fn set_value_silently(&self, value: &str) {
+        let font = font();
+        self.with_edit_box(|e| e.set_value(&font.splitter(), value));
+    }
+
+    /// `getCursorPosition()`
+    pub fn get_cursor_position(&self) -> i32 {
+        self.with_edit_box(|e| e.get_cursor_position())
+    }
+
+    /// `setCursorPosition(pos)`
+    pub fn set_cursor_position(&self, pos: i32) {
+        let font = font();
+        self.with_edit_box(|e| e.set_cursor_position(&font.splitter(), pos));
+    }
+
+    /// `setHint(component)`
+    pub fn set_hint(&self, hint: mcrust::net::minecraft::network::chat::mutable_component::MutableComponent) {
+        self.with_edit_box(|e| e.hint = Some(mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(hint)));
+    }
+
+    pub fn get_x(&self) -> i32 {
+        self.with_widget(|w| w.get_x())
+    }
+    pub fn get_y(&self) -> i32 {
+        self.with_widget(|w| w.get_y())
+    }
+    pub fn get_width(&self) -> i32 {
+        self.with_widget(|w| w.get_width())
+    }
+    pub fn get_height(&self) -> i32 {
+        self.with_widget(|w| w.get_height())
+    }
+    pub fn is_visible(&self) -> bool {
+        self.with_widget(|w| w.visible)
+    }
+    pub fn is_active(&self) -> bool {
+        self.with_widget(|w| w.is_active())
+    }
+}
+
+impl GuiEventListener for EditBoxWidget {
+    /// `EditBox.extractWidgetRenderState` (the game's), with `handleCursor`'s I-beam.
+    fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, _a: f32) {
+        let mut screen = self.screen.borrow_mut();
+        let focused = self.focused.get();
+        let w = screen.widget_mut(0);
+        if w.is_focused() != focused {
+            w.set_focused(focused, mcrust::net::minecraft::client::input_type::InputType::None);
+        }
+        let visible = w.visible;
+        let hovered = visible && w.is_mouse_over(mouse_x as f64, mouse_y as f64);
+        graphics.widget_context().extract_widgets(&mut screen, mouse_x, mouse_y);
+        if hovered {
+            graphics.request_cursor(CursorKind::IBeam);
+        }
+    }
+
+    /// `AbstractWidget.mouseClicked` -> `EditBox.onClick:388-394` (the cursor moves to the press).
+    fn mouse_clicked(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent, double_click: bool) -> bool {
+        if !self.is_active() || event.button() != 0 || !self.is_mouse_over(event.x(), event.y()) {
+            return false;
+        }
+        let font = font();
+        let shift = {
+            use mcrust::net::minecraft::client::input::input_with_modifiers::InputWithModifiers as _;
+            event.button_info().has_shift_down()
+        };
+        self.with_edit_box(|e| e.on_click(&font.splitter(), event.x(), shift, double_click));
+        true
+    }
+
+    /// `EditBox.onDrag:396-399`
+    fn mouse_dragged(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent, _dx: f64, _dy: f64) -> bool {
+        if event.button() != 0 {
+            return false;
+        }
+        let font = font();
+        self.with_edit_box(|e| {
+            let pos = e.find_clicked_position_in_text(&font.splitter(), event.x());
+            e.move_cursor_to(&font.splitter(), pos, true);
+        });
+        true
+    }
+
+    fn mouse_released(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent) -> bool {
+        event.button() == 0
+    }
+
+    /// `EditBox.keyPressed:280-345` with the window's clipboard.
+    fn key_pressed(&self, event: &mcrust::net::minecraft::client::input::key_event::KeyEvent) -> bool {
+        let before = self.get_value();
+        let font = font();
+        let focused = self.focused.get();
+        let active = self.is_active();
+        let handled = self.with_edit_box(|e| {
+            let mut memory = mcrust::net::minecraft::client::gui::components::edit_box::MemoryClipboard::default();
+            match mcrust::net::minecraft::client::minecraft::GlfwClipboard::published() {
+                Some(mut clipboard) => e.key_pressed(&font.splitter(), *event, focused, active, &mut clipboard),
+                None => e.key_pressed(&font.splitter(), *event, focused, active, &mut memory),
+            }
+        });
+        self.after_edit(&before);
+        handled
+    }
+
+    /// `EditBox.charTyped:352-360`
+    fn char_typed(&self, event: &mcrust::net::minecraft::client::input::character_event::CharacterEvent) -> bool {
+        let Some(c) = char::from_u32(event.codepoint() as u32) else {
+            return false;
+        };
+        let before = self.get_value();
+        let font = font();
+        let focused = self.focused.get();
+        let active = self.is_active();
+        let handled = self.with_edit_box(|e| e.char_typed(&font.splitter(), c, focused, active));
+        self.after_edit(&before);
+        handled
+    }
+
+    fn is_mouse_over(&self, x: f64, y: f64) -> bool {
+        self.with_widget(|w| w.is_mouse_over(x, y))
+    }
+
+    /// `EditBox.setFocused:529-541` - `canLoseFocus || focused`.
+    fn set_focused(&self, focused: bool) {
+        let can_lose_focus = self.with_edit_box(|e| e.can_lose_focus);
+        if can_lose_focus || focused {
+            self.focused.set(focused);
+            self.with_widget(|w| w.set_focused(focused, mcrust::net::minecraft::client::input_type::InputType::None));
+        }
+    }
+
+    fn is_focused(&self) -> bool {
+        self.focused.get()
+    }
+}

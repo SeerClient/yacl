@@ -1,31 +1,21 @@
-//! Ported from dev.isxander.yacl3.impl.controller.AbstractControllerBuilderImpl by fabric2seer.
+//! Ported from dev.isxander.yacl3.impl.controller.AbstractControllerBuilderImpl.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use crate::dev::isxander::yacl3::api::controller::controller_builder::ControllerBuilder;
+use crate::dev::isxander::yacl3::api::option::Option as YOption;
 
 /// java: public abstract class AbstractControllerBuilderImpl<T> implements ControllerBuilder<T>
-#[derive(Clone)]
-pub struct AbstractControllerBuilderImplBase<T> {
+///
+/// Its one field is the option; each builder keeps it itself (`option`), so this struct is that field for a builder
+/// that wants it by name.
+pub struct AbstractControllerBuilderImpl<T: Clone + 'static> {
     /// java: protected final Option<T> option;
-    pub option: compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<T>>,
+    pub option: Arc<dyn YOption<T>>,
 }
 
-impl<T: Clone + 'static> AbstractControllerBuilderImplBase<T> {
+impl<T: Clone + 'static> AbstractControllerBuilderImpl<T> {
     /// java: protected AbstractControllerBuilderImpl(Option<T> option)
-    pub fn new(mut option: compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<T>>) -> Self {
-        let __init_option = option.clone();
-        let mut this = Self {
-            option: __init_option,
-        };
-        this
+    pub fn new(option: Arc<dyn YOption<T>>) -> Self {
+        Self { option }
     }
-
-}
-
-/// java: the virtual methods of AbstractControllerBuilderImpl (implemented by AbstractControllerBuilderImplBase and every subclass)
-pub trait AbstractControllerBuilderImpl<T: Clone + 'static>: ControllerBuilder {
-    fn abstract_controller_builder_impl_base(&self) -> &AbstractControllerBuilderImplBase<T>;
-    fn abstract_controller_builder_impl_base_mut(&mut self) -> &mut AbstractControllerBuilderImplBase<T>;
-
 }

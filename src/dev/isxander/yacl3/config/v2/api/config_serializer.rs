@@ -6,53 +6,84 @@ use crate::dev::isxander::yacl3::config::v2::api::config_class_handler::ConfigCl
 use crate::dev::isxander::yacl3::config::v2::api::config_field::ConfigField;
 use crate::dev::isxander::yacl3::config::v2::api::field_access::FieldAccess;
 
-/// java: public abstract class ConfigSerializer<T>
-#[derive(Clone)]
-pub struct ConfigSerializerBase<T> {
+/// java: public abstract class ConfigSerializer<T> - its fields
+pub struct ConfigSerializerBase<T: 'static> {
     /// java: protected final ConfigClassHandler<T> config;
-    pub config: compat::Shared<dyn ConfigClassHandler<T>>,
+    pub config: Arc<dyn ConfigClassHandler<T>>,
 }
 
-impl<T: Clone + 'static> ConfigSerializerBase<T> {
-    /// java: public ConfigSerializer(ConfigClassHandler<T> config)
-    pub fn new(mut config: compat::Shared<dyn ConfigClassHandler<T>>) -> Self {
-        let __init_config = config.clone();
-        let mut this = Self {
-            config: __init_config,
-        };
-        this
+impl<T: 'static> Clone for ConfigSerializerBase<T> {
+    fn clone(&self) -> Self {
+        Self { config: self.config.clone() }
     }
-
 }
 
-/// java: the virtual methods of ConfigSerializer (implemented by ConfigSerializerBase and every subclass)
-pub trait ConfigSerializer<T: Clone + 'static> {
+impl<T: 'static> ConfigSerializerBase<T> {
+    /// java: public ConfigSerializer(ConfigClassHandler<T> config)
+    pub fn new(config: Arc<dyn ConfigClassHandler<T>>) -> Self {
+        Self { config }
+    }
+}
+
+/// java: the virtual methods of ConfigSerializer (implemented by every subclass)
+///
+/// Every method takes `&self`: a serializer is reached through the handler (`config.serializer().save()`) while the
+/// handler itself is in use (`ConfigClassHandler.load` -> `loadSafely` -> `config.fields()`).
+pub trait ConfigSerializer<T: 'static> {
     fn config_serializer_base(&self) -> &ConfigSerializerBase<T>;
-    fn config_serializer_base_mut(&mut self) -> &mut ConfigSerializerBase<T>;
     fn as_any(&self) -> &dyn std::any::Any;
 
     /// java: public abstract void save();
     fn save(&self);
 
     /// java: public LoadResult loadSafely(Map<ConfigField<?>, FieldAccess<?>> bufferAccessMap)
-    fn load_safely(&self, buffer_access_map: &std::collections::HashMap<compat::Shared<dyn ConfigField<compat::Object>>, compat::Shared<dyn FieldAccess<compat::Object>>>) -> LoadResult {
+    fn load_safely(&self, buffer_access_map: &BufferAccessMap) -> LoadResult {
         self.load();
-        return LoadResult::NoChange;
+        LoadResult::NoChange
     }
 
     /// java: @Deprecated public void load()
-    fn load(&mut self) {
+    fn load(&self) {
         panic!("IllegalArgumentException: {}", "load() is deprecated, use loadSafely() instead.");
     }
+}
 
+/// java: `Map<ConfigField<?>, FieldAccess<?>>` - `ConfigFieldImpl` has no `equals`/`hashCode`, so the map is keyed by
+/// the field object's identity (`Arc::ptr_eq`).
+#[derive(Clone, Default)]
+pub struct BufferAccessMap {
+    pub entries: Vec<(Arc<dyn ConfigField<compat::Object>>, Arc<dyn FieldAccess<compat::Object>>)>,
+}
+
+impl BufferAccessMap {
+    pub fn new(entries: Vec<(Arc<dyn ConfigField<compat::Object>>, Arc<dyn FieldAccess<compat::Object>>)>) -> BufferAccessMap {
+        BufferAccessMap { entries }
+    }
+
+    /// java: Map.get(field) - `None` is Java's `null`
+    pub fn get(&self, field: &Arc<dyn ConfigField<compat::Object>>) -> Option<Arc<dyn FieldAccess<compat::Object>>> {
+        self.entries
+            .iter()
+            .find(|(k, _)| std::ptr::addr_eq(Arc::as_ptr(k), Arc::as_ptr(field)))
+            .map(|(_, v)| v.clone())
+    }
+
+    /// java: Map.size()
+    pub fn size(&self) -> i32 {
+        self.entries.len() as i32
+    }
 }
 
 /// java: public enum LoadResult
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum LoadResult {
+    /// The config was loaded successfully and the temporary object should be applied.
     Success,
+    /// The config was not loaded successfully and the load should be abandoned.
     Failure,
+    /// The config has not changed after a load and the temporary object should be ignored.
     NoChange,
+    /// The config was loaded successfully, but should be re-saved straight away.
     Dirty,
 }
 
@@ -89,7 +120,6 @@ impl LoadResult {
             _ => panic!("IllegalArgumentException: No enum constant LoadResult.{name}"),
         }
     }
-
 }
 
 impl std::fmt::Display for LoadResult {

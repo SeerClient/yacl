@@ -7,38 +7,45 @@ use crate::dev::isxander::yacl3::api::binding::Binding;
 use crate::dev::isxander::yacl3::config::v3::readonly_config_entry::ReadonlyConfigEntry;
 
 /// java: @ApiStatus.Experimental public interface ConfigEntry<T> extends ReadonlyConfigEntry<T>
-pub trait ConfigEntry<T: Clone + 'static>: ReadonlyConfigEntry {
+///
+/// Java overrides `modifyGet` / `onGet` here with a covariant return (`ConfigEntry<T>`). Rust has no covariant
+/// override and both traits are in scope everywhere (the prelude), so the overrides are `modify_get_entry` /
+/// `on_get_entry`; `modify_get` / `on_get` (the `ReadonlyConfigEntry` ones) answer the same object.
+pub trait ConfigEntry<T: Clone + 'static>: ReadonlyConfigEntry<T> {
     /// java: void set(T value);
-    fn set(&mut self, value: &T);
+    fn set(&self, value: T);
 
     /// java: T defaultValue();
     fn default_value(&self) -> T;
 
     /// java: @Override ConfigEntry<T> modifyGet(UnaryOperator<T> modifier);
-    fn modify_get(&mut self, modifier: Arc<dyn Fn(T) -> T>) -> compat::Shared<dyn ConfigEntry<T>>;
+    fn modify_get_entry(&self, modifier: Arc<dyn Fn(T) -> T>) -> Arc<dyn ConfigEntry<T>>;
 
     /// java: @Override default ConfigEntry<T> onGet(Consumer<T> consumer)
-    fn on_get(&self, consumer: Arc<dyn Fn(T)>) -> compat::Shared<dyn ConfigEntry<T>> {
-        return self.modify_get(Arc::new(move |v| {
-            (consumer)(v.clone());
-            return v;
-        }));
+    fn on_get_entry(&self, consumer: Arc<dyn Fn(T)>) -> Arc<dyn ConfigEntry<T>> {
+        self.modify_get_entry(Arc::new(move |v: T| {
+            consumer(v.clone());
+            v
+        }))
     }
 
     /// java: ConfigEntry<T> modifySet(UnaryOperator<T> modifier);
-    fn modify_set(&mut self, modifier: Arc<dyn Fn(T) -> T>) -> compat::Shared<dyn ConfigEntry<T>>;
+    fn modify_set(&self, modifier: Arc<dyn Fn(T) -> T>) -> Arc<dyn ConfigEntry<T>>;
 
     /// java: default ConfigEntry<T> onSet(Consumer<T> consumer)
-    fn on_set(&self, consumer: Arc<dyn Fn(T)>) -> compat::Shared<dyn ConfigEntry<T>> {
-        return self.modify_set(Arc::new(move |v| {
-            (consumer)(v.clone());
-            return v;
-        }));
+    fn on_set(&self, consumer: Arc<dyn Fn(T)>) -> Arc<dyn ConfigEntry<T>> {
+        self.modify_set(Arc::new(move |v: T| {
+            consumer(v.clone());
+            v
+        }))
     }
+}
 
-    /// java: default Binding<T> asBinding()
-    fn as_binding(&self) -> compat::Shared<dyn Binding<T>> {
-        return binding::generic(&self.default_value(), Arc::new(move || self.get()), Arc::new(move |__a0| { self.set(&__a0); }));
-    }
-
+/// java: default Binding<T> asBinding()
+///
+/// `this` is the entry's own reference: the binding's getter and setter keep it (`this::get`, `this::set`).
+pub fn as_binding<T: Clone + 'static>(this: &Arc<dyn ConfigEntry<T>>) -> Arc<dyn Binding<T>> {
+    let getter = this.clone();
+    let setter = this.clone();
+    binding::generic(this.default_value(), move || getter.get(), move |v: T| setter.set(v))
 }

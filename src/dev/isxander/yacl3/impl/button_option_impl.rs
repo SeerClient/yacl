@@ -1,370 +1,250 @@
-//! Ported from dev.isxander.yacl3.impl.ButtonOptionImpl by fabric2seer.
+//! Ported from dev.isxander.yacl3.impl.ButtonOptionImpl.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::binding::Binding;
-use crate::dev::isxander::yacl3::api::button_option::Builder;
-use crate::dev::isxander::yacl3::api::button_option::ButtonOption;
+use crate::dev::isxander::yacl3::api::button_option::{ButtonAction, ButtonOption, Builder};
 use crate::dev::isxander::yacl3::api::controller::Controller;
-use crate::dev::isxander::yacl3::api::option_description;
-use crate::dev::isxander::yacl3::api::option_description::OptionDescription;
-use crate::dev::isxander::yacl3::api::option_event_listener::OptionEventListener;
+use crate::dev::isxander::yacl3::api::option::{AnyOption, Option as YOption};
+use crate::dev::isxander::yacl3::api::option_description::{self, OptionDescription};
+use crate::dev::isxander::yacl3::api::option_event_listener::{Event, OptionEventListener};
 use crate::dev::isxander::yacl3::api::option_flag::OptionFlag;
-use crate::dev::isxander::yacl3::api::state_manager;
-use crate::dev::isxander::yacl3::api::state_manager::StateManager;
+use crate::dev::isxander::yacl3::api::state_manager::{self, StateManager};
+use crate::dev::isxander::yacl3::api::utils::dimension::Dimension;
+use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget;
 use crate::dev::isxander::yacl3::gui::controllers::action_controller::ActionController;
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
+use std::cell::{Cell, RefCell};
 
 /// java: @ApiStatus.Internal public final class ButtonOptionImpl implements ButtonOption
-#[derive(Clone)]
 pub struct ButtonOptionImpl {
     /// java: private final Component name;
     pub name: MutableComponent,
     /// java: private final OptionDescription description;
-    pub description: compat::Shared<dyn OptionDescription>,
+    pub description: Arc<dyn OptionDescription>,
     /// java: private final StateManager<BiConsumer<YACLScreen, ButtonOption>> stateManager;
-    pub state_manager: compat::Shared<dyn StateManager<Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>>>,
+    pub state_manager: Arc<dyn StateManager<ButtonAction>>,
     /// java: private boolean available;
-    pub available: bool,
+    pub available: Cell<bool>,
     /// java: private final Controller<BiConsumer<YACLScreen, ButtonOption>> controller;
-    pub controller: Option<compat::Shared<dyn Controller<Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>>>>,
-    /// the object's own shared handle: Java's `this` handed to other objects
-    pub self_ref: compat::WeakShared<Self>,
+    pub controller: RefCell<Option<Arc<dyn Controller<ButtonAction>>>>,
 }
 
 impl ButtonOptionImpl {
-    /// java: public ButtonOptionImpl( @NotNull Component name, @Nullable OptionDescription description, @NotNull BiConsumer<YACLScreen, ButtonOption> action, @Nullable Component text, boolean available )
-    pub fn new(mut name: MutableComponent, mut description: Option<compat::Shared<dyn OptionDescription>>, action: Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>, mut text: Option<MutableComponent>, mut available: bool) -> compat::Shared<Self> {
-        let __init_name = name.clone();
-        let __init_description = description.clone().unwrap();
-        let __init_state_manager = state_manager::create_immutable(&action);
-        let __init_available = available;
-        let __this = compat::shared(Self {
-            self_ref: std::sync::Weak::new(),
-            name: __init_name,
-            description: __init_description,
-            state_manager: __init_state_manager,
-            available: __init_available,
-            controller: None,
+    /// java: public ButtonOptionImpl(@NotNull Component name, @Nullable OptionDescription description,
+    /// @NotNull BiConsumer<YACLScreen, ButtonOption> action, @Nullable Component text, boolean available)
+    pub fn new(
+        name: MutableComponent,
+        description: Arc<dyn OptionDescription>,
+        action: ButtonAction,
+        text: Option<MutableComponent>,
+        available: bool,
+    ) -> Arc<ButtonOptionImpl> {
+        let option = Arc::new(ButtonOptionImpl {
+            name,
+            description,
+            state_manager: state_manager::create_immutable(action),
+            available: Cell::new(available),
+            controller: RefCell::new(None),
         });
-        compat::write(&__this, |__t| __t.self_ref = std::sync::Arc::downgrade(&__this));
-        { let __v = Some(((if text.is_some() { (ActionController::new_2((__this.clone() as compat::Shared<dyn ButtonOption>), text.clone().unwrap()) as compat::Shared<dyn Controller<compat::Object>>) } else { (ActionController::new((__this.clone() as compat::Shared<dyn ButtonOption>)) as compat::Shared<dyn Controller<compat::Object>>) }) as compat::Shared<dyn Controller<compat::Object>>)); compat::write(&__this, |__t| __t.controller = __v); }
-        __this
+        // java: this.controller = text != null ? new ActionController(this, text) : new ActionController(this);
+        let this: Arc<dyn ButtonOption> = option.clone();
+        let controller: Arc<dyn Controller<ButtonAction>> = match text {
+            Some(text) => Arc::new(ActionController::new_1(this, text)),
+            None => Arc::new(ActionController::new(this)),
+        };
+        *option.controller.borrow_mut() = Some(controller);
+        option
     }
-
 }
 
-impl ButtonOption for ButtonOptionImpl {
-    /// java: @Override public BiConsumer<YACLScreen, ButtonOption> action() (dispatch: the body for this class)
-    fn action(&self) -> fn(&compat::Shared<dyn ButtonOption>) -> Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)> {
-        ButtonOptionImpl::action_dyn
-    }
-
-}
-
-impl crate::dev::isxander::yacl3::api::option::Option<compat::Object> for ButtonOptionImpl {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
+impl AnyOption for ButtonOptionImpl {
     /// java: @Override public @NotNull Component name()
     fn name(&self) -> MutableComponent {
-        return self.name.clone();
+        self.name.clone()
     }
 
     /// java: @Override public @NotNull OptionDescription description()
-    fn description(&self) -> compat::Shared<dyn OptionDescription> {
-        return self.description.clone();
+    fn description(&self) -> Arc<dyn OptionDescription> {
+        self.description.clone()
     }
 
     /// java: @Override public @NotNull Component tooltip()
     fn tooltip(&self) -> MutableComponent {
-        return ({ let __r = &self.description(); let __f = compat::dispatch(__r, |__t| __t.text()); __f(__r) });
+        self.description.text()
     }
 
     /// java: @Override public boolean available()
     fn available(&self) -> bool {
-        return self.available;
+        self.available.get()
     }
 
     /// java: @Override public void setAvailable(boolean available)
-    fn set_available(&mut self, mut available: bool) {
-        self.available = available;
-    }
-
-    /// java: @Override public @NotNull Controller<BiConsumer<YACLScreen, ButtonOption>> controller()
-    fn controller(&self) -> compat::Shared<dyn Controller<Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>>> {
-        return self.controller.clone().unwrap();
-    }
-
-    /// java: @Override public @NotNull StateManager<BiConsumer<YACLScreen, ButtonOption>> stateManager()
-    fn state_manager(&self) -> compat::Shared<dyn StateManager<Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>>> {
-        return self.state_manager.clone();
-    }
-
-    /// java: @Override public @NotNull Binding<BiConsumer<YACLScreen, ButtonOption>> binding()
-    fn binding(&self) -> compat::Shared<dyn Binding<Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>>> {
-        return (compat::shared(EmptyBinderImpl::new()) as compat::Shared<dyn Binding<compat::Object>>);
+    fn set_available(&self, available: bool) {
+        self.available.set(available);
     }
 
     /// java: @Override public @NotNull ImmutableSet<OptionFlag> flags()
-    fn flags(&self) -> std::collections::HashSet<compat::Shared<dyn OptionFlag>> {
-        return std::collections::HashSet::from([]);
+    fn flags(&self) -> Vec<Arc<dyn OptionFlag>> {
+        Vec::new()
     }
 
     /// java: @Override public boolean changed()
     fn changed(&self) -> bool {
-        return false;
-    }
-
-    /// java: @Override public @NotNull BiConsumer<YACLScreen, ButtonOption> pendingValue()
-    fn pending_value(&self) -> Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)> {
-        panic!("UnsupportedOperationException");
-    }
-
-    /// java: @Override public void requestSet(@NotNull BiConsumer<YACLScreen, ButtonOption> value)
-    fn request_set(&mut self, mut value: Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>) {
-        panic!("UnsupportedOperationException");
+        false
     }
 
     /// java: @Override public boolean applyValue()
     fn apply_value(&self) -> bool {
-        return false;
+        false
     }
 
     /// java: @Override public void forgetPendingValue()
-    fn forget_pending_value(&mut self) {
-    }
+    fn forget_pending_value(&self) {}
 
     /// java: @Override public void requestSetDefault()
-    fn request_set_default(&mut self) {
-    }
+    fn request_set_default(&self) {}
 
     /// java: @Override public boolean isPendingValueDefault()
     fn is_pending_value_default(&self) -> bool {
         panic!("UnsupportedOperationException");
     }
 
-    /// java: @Override public void addEventListener(OptionEventListener<BiConsumer<YACLScreen, ButtonOption>> listener)
-    fn add_event_listener(&mut self, mut listener: compat::Shared<dyn OptionEventListener<Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>>>) {
+    fn provide_controller_widget(&self, screen: &Arc<YACLScreen>, widget_dimension: Arc<dyn Dimension<i32>>) -> Arc<dyn AbstractWidget> {
+        self.controller().provide_widget(screen, widget_dimension)
     }
 
-    /// java: @Override public void addListener(BiConsumer<Option<BiConsumer<YACLScreen, ButtonOption>>, BiConsumer<YACLScreen, ButtonOption>> changedListener)
-    fn add_listener(&mut self, changed_listener: Arc<dyn Fn(compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>>>, Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>)>) {
-    }
+    /// java: @Override public void addEventListener(..) - empty
+    fn add_any_event_listener(&self, _listener: Arc<dyn Fn(&dyn AnyOption, Event)>) {}
 
+    /// java: @Override public void addListener(..) - empty
+    fn add_any_listener(&self, _changed_listener: Arc<dyn Fn(&dyn AnyOption)>) {}
 }
 
-impl ButtonOptionImpl {
+impl YOption<ButtonAction> for ButtonOptionImpl {
+    /// java: @Override public @NotNull Controller<BiConsumer<YACLScreen, ButtonOption>> controller()
+    fn controller(&self) -> Arc<dyn Controller<ButtonAction>> {
+        self.controller.borrow().clone().expect("ButtonOptionImpl.controller() before the constructor set it")
+    }
+
+    /// java: @Override public @NotNull StateManager<BiConsumer<YACLScreen, ButtonOption>> stateManager()
+    fn state_manager(&self) -> Arc<dyn StateManager<ButtonAction>> {
+        self.state_manager.clone()
+    }
+
+    /// java: @Override public @NotNull Binding<BiConsumer<YACLScreen, ButtonOption>> binding()
+    fn binding(&self) -> Arc<dyn Binding<ButtonAction>> {
+        Arc::new(EmptyBinderImpl)
+    }
+
+    /// java: @Override public @NotNull BiConsumer<YACLScreen, ButtonOption> pendingValue()
+    fn pending_value(&self) -> ButtonAction {
+        panic!("UnsupportedOperationException");
+    }
+
+    /// java: @Override public void requestSet(@NotNull BiConsumer<YACLScreen, ButtonOption> value)
+    fn request_set(&self, _value: ButtonAction) {
+        panic!("UnsupportedOperationException");
+    }
+
+    /// java: @Override public void addEventListener(OptionEventListener<..> listener) - empty
+    fn add_event_listener(&self, _listener: Arc<dyn OptionEventListener<ButtonAction>>) {}
+
+    /// java: @Override public void addListener(BiConsumer<..> changedListener) - empty
+    fn add_listener(&self, _changed_listener: Arc<dyn Fn(&dyn YOption<ButtonAction>, ButtonAction)>) {}
+}
+
+impl ButtonOption for ButtonOptionImpl {
     /// java: @Override public BiConsumer<YACLScreen, ButtonOption> action()
-    pub fn action_impl(__this: &compat::Shared<Self>) -> Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)> {
-        return __this.lock().borrow().state_manager().lock().borrow().get();
+    fn action(&self) -> ButtonAction {
+        self.state_manager().get()
     }
-
-    /// ButtonOptionImpl.action as the dispatch of ButtonOption.action
-    pub fn action_dyn(__this: &compat::Shared<dyn ButtonOption>) -> Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)> {
-        Self::action_impl(&compat::view_as::<Self, _, Self>(__this, |a| a))
-    }
-
 }
 
 /// java: private static class EmptyBinderImpl implements Binding<BiConsumer<YACLScreen, ButtonOption>>
-#[derive(Clone)]
-pub struct EmptyBinderImpl {}
+pub struct EmptyBinderImpl;
 
-impl EmptyBinderImpl {
-    /// java: the implicit no-argument constructor
-    pub fn new() -> Self {
-        let mut this = Self {
-        };
-        this
-    }
+impl Binding<ButtonAction> for EmptyBinderImpl {
+    fn set_value(&self, _value: ButtonAction) {}
 
-}
-
-impl Binding<Arc<dyn Fn(compat::Shared<crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen>, compat::Shared<dyn crate::dev::isxander::yacl3::api::button_option::ButtonOption>)>> for EmptyBinderImpl {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    /// java: @Override public void setValue(BiConsumer<YACLScreen, ButtonOption> value)
-    fn set_value(&mut self, mut value: Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>) {
-    }
-
-    /// java: @Override public BiConsumer<YACLScreen, ButtonOption> getValue()
-    fn get_value(&self) -> Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)> {
+    fn get_value(&self) -> ButtonAction {
         panic!("UnsupportedOperationException");
     }
 
-    /// java: @Override public BiConsumer<YACLScreen, ButtonOption> defaultValue()
-    fn default_value(&self) -> Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)> {
+    fn default_value(&self) -> ButtonAction {
         panic!("UnsupportedOperationException");
     }
-
 }
 
 /// java: @ApiStatus.Internal public static final class BuilderImpl implements Builder
-#[derive(Clone)]
 pub struct BuilderImpl {
     /// java: private Component name;
     pub name: Option<MutableComponent>,
     /// java: private Component text = null;
     pub text: Option<MutableComponent>,
     /// java: private OptionDescription description = OptionDescription.EMPTY;
-    pub description: compat::Shared<dyn OptionDescription>,
+    pub description: Arc<dyn OptionDescription>,
     /// java: private boolean available = true;
     pub available: bool,
     /// java: private BiConsumer<YACLScreen, ButtonOption> action;
-    pub action: Option<Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>>,
+    pub action: Option<ButtonAction>,
 }
 
 impl BuilderImpl {
     /// java: the implicit no-argument constructor
-    pub fn new() -> compat::Shared<Self> {
-        let __this = compat::shared(Self {
-            name: None,
-            text: None,
-            description: option_description::EMPTY.get_mut().clone(),
-            available: true,
-            action: None,
-        });
-        __this
+    pub fn new() -> Self {
+        Self { name: None, text: None, description: option_description::EMPTY(), available: true, action: None }
     }
+}
 
+impl Default for BuilderImpl {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Builder for BuilderImpl {
-    fn as_any(&self) -> &dyn std::any::Any {
+    /// java: @Override public Builder name(@NotNull Component name)
+    fn name(mut self, name: MutableComponent) -> Self {
+        self.name = Some(name);
         self
     }
 
-    /// java: @Override public Builder name(@NotNull Component name) (dispatch: the body for this class)
-    fn name(&self) -> fn(&compat::Shared<dyn Builder>, MutableComponent) -> compat::Shared<dyn Builder> {
-        BuilderImpl::name_dyn
-    }
-
-    /// java: @Override public Builder text(@NotNull Component text) (dispatch: the body for this class)
-    fn text(&self) -> fn(&compat::Shared<dyn Builder>, MutableComponent) -> compat::Shared<dyn Builder> {
-        BuilderImpl::text_dyn
-    }
-
-    /// java: @Override public Builder description(@NotNull OptionDescription description) (dispatch: the body for this class)
-    fn description(&self) -> fn(&compat::Shared<dyn Builder>, compat::Shared<dyn OptionDescription>) -> compat::Shared<dyn Builder> {
-        BuilderImpl::description_dyn
-    }
-
-    /// java: @Override public Builder action(@NotNull BiConsumer<YACLScreen, ButtonOption> action) (dispatch: the body for this class)
-    fn action(&self) -> fn(&compat::Shared<dyn Builder>, Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>) -> compat::Shared<dyn Builder> {
-        BuilderImpl::action_dyn
-    }
-
-    /// java: @Override @Deprecated public Builder action(@NotNull Consumer<YACLScreen> action) (dispatch: the body for this class)
-    fn action_consumer(&self) -> fn(&compat::Shared<dyn Builder>, Arc<dyn Fn(compat::Shared<YACLScreen>)>) -> compat::Shared<dyn Builder> {
-        BuilderImpl::action_consumer_dyn
-    }
-
-    /// java: @Override public Builder available(boolean available) (dispatch: the body for this class)
-    fn available(&self) -> fn(&compat::Shared<dyn Builder>, bool) -> compat::Shared<dyn Builder> {
-        BuilderImpl::available_dyn
-    }
-
-    /// java: @Override public ButtonOption build() (dispatch: the body for this class)
-    fn build(&self) -> fn(&compat::Shared<dyn Builder>) -> compat::Shared<dyn ButtonOption> {
-        BuilderImpl::build_dyn
-    }
-
-}
-
-impl BuilderImpl {
-    /// java: @Override public Builder name(@NotNull Component name)
-    pub fn name_impl(__this: &compat::Shared<Self>, mut name: MutableComponent) -> compat::Shared<dyn Builder> {
-        // TODO(fabric2seer): static call Validate.notNull(..)
-        //   java: Validate.notNull(name, "`name` cannot be null");
-        { let __v = Some(name.clone()); compat::write(__this, |__t| __t.name = __v); }
-        return (__this.clone() as compat::Shared<dyn Builder>);
-    }
-
-    /// BuilderImpl.name as the dispatch of Builder.name
-    pub fn name_dyn(__this: &compat::Shared<dyn Builder>, __p0: MutableComponent) -> compat::Shared<dyn Builder> {
-        Self::name_impl(&compat::view_as::<Self, _, Self>(__this, |a| a), __p0)
-    }
-
     /// java: @Override public Builder text(@NotNull Component text)
-    pub fn text_impl(__this: &compat::Shared<Self>, mut text: MutableComponent) -> compat::Shared<dyn Builder> {
-        // TODO(fabric2seer): static call Validate.notNull(..)
-        //   java: Validate.notNull(text, "`text` cannot be null");
-        { let __v = Some(text.clone()); compat::write(__this, |__t| __t.text = __v); }
-        return (__this.clone() as compat::Shared<dyn Builder>);
-    }
-
-    /// BuilderImpl.text as the dispatch of Builder.text
-    pub fn text_dyn(__this: &compat::Shared<dyn Builder>, __p0: MutableComponent) -> compat::Shared<dyn Builder> {
-        Self::text_impl(&compat::view_as::<Self, _, Self>(__this, |a| a), __p0)
+    fn text(mut self, text: MutableComponent) -> Self {
+        self.text = Some(text);
+        self
     }
 
     /// java: @Override public Builder description(@NotNull OptionDescription description)
-    pub fn description_impl(__this: &compat::Shared<Self>, mut description: compat::Shared<dyn OptionDescription>) -> compat::Shared<dyn Builder> {
-        // TODO(fabric2seer): static call Validate.notNull(..)
-        //   java: Validate.notNull(description, "`description` cannot be null");
-        { let __v = description.clone(); compat::write(__this, |__t| __t.description = __v); }
-        return (__this.clone() as compat::Shared<dyn Builder>);
-    }
-
-    /// BuilderImpl.description as the dispatch of Builder.description
-    pub fn description_dyn(__this: &compat::Shared<dyn Builder>, __p0: compat::Shared<dyn OptionDescription>) -> compat::Shared<dyn Builder> {
-        Self::description_impl(&compat::view_as::<Self, _, Self>(__this, |a| a), __p0)
+    fn description(mut self, description: Arc<dyn OptionDescription>) -> Self {
+        self.description = description;
+        self
     }
 
     /// java: @Override public Builder action(@NotNull BiConsumer<YACLScreen, ButtonOption> action)
-    pub fn action_impl(__this: &compat::Shared<Self>, action: Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>) -> compat::Shared<dyn Builder> {
-        // TODO(fabric2seer): static call Validate.notNull(..)
-        //   java: Validate.notNull(action, "`action` cannot be null");
-        { let __v = Some(action.clone()); compat::write(__this, |__t| __t.action = __v); }
-        return (__this.clone() as compat::Shared<dyn Builder>);
-    }
-
-    /// BuilderImpl.action as the dispatch of Builder.action
-    pub fn action_dyn(__this: &compat::Shared<dyn Builder>, __p0: Arc<dyn Fn(compat::Shared<YACLScreen>, compat::Shared<dyn ButtonOption>)>) -> compat::Shared<dyn Builder> {
-        Self::action_impl(&compat::view_as::<Self, _, Self>(__this, |a| a), __p0)
+    fn action(mut self, action: impl Fn(&Arc<YACLScreen>, &dyn ButtonOption) + 'static) -> Self {
+        self.action = Some(Arc::new(action));
+        self
     }
 
     /// java: @Override @Deprecated public Builder action(@NotNull Consumer<YACLScreen> action)
-    pub fn action_consumer_impl(__this: &compat::Shared<Self>, action: Arc<dyn Fn(compat::Shared<YACLScreen>)>) -> compat::Shared<dyn Builder> {
-        // TODO(fabric2seer): static call Validate.notNull(..)
-        //   java: Validate.notNull(action, "`action` cannot be null");
-        { let __v = Some(Arc::new(move |screen, button| { (action)(screen.clone()); })); compat::write(__this, |__t| __t.action = __v); }
-        return (__this.clone() as compat::Shared<dyn Builder>);
-    }
-
-    /// BuilderImpl.action as the dispatch of Builder.action
-    pub fn action_consumer_dyn(__this: &compat::Shared<dyn Builder>, __p0: Arc<dyn Fn(compat::Shared<YACLScreen>)>) -> compat::Shared<dyn Builder> {
-        Self::action_consumer_impl(&compat::view_as::<Self, _, Self>(__this, |a| a), __p0)
+    fn action_consumer(mut self, action: impl Fn(&Arc<YACLScreen>) + 'static) -> Self {
+        self.action = Some(Arc::new(move |screen: &Arc<YACLScreen>, _button: &dyn ButtonOption| action(screen)));
+        self
     }
 
     /// java: @Override public Builder available(boolean available)
-    pub fn available_impl(__this: &compat::Shared<Self>, mut available: bool) -> compat::Shared<dyn Builder> {
-        { let __v = available; compat::write(__this, |__t| __t.available = __v); }
-        return (__this.clone() as compat::Shared<dyn Builder>);
-    }
-
-    /// BuilderImpl.available as the dispatch of Builder.available
-    pub fn available_dyn(__this: &compat::Shared<dyn Builder>, __p0: bool) -> compat::Shared<dyn Builder> {
-        Self::available_impl(&compat::view_as::<Self, _, Self>(__this, |a| a), __p0)
+    fn available(mut self, available: bool) -> Self {
+        self.available = available;
+        self
     }
 
     /// java: @Override public ButtonOption build()
-    pub fn build_impl(__this: &compat::Shared<Self>) -> compat::Shared<dyn ButtonOption> {
-        // TODO(fabric2seer): static call Validate.notNull(..)
-        //   java: Validate.notNull(name, "`name` must not be null when building `ButtonOption`");
-        // TODO(fabric2seer): static call Validate.notNull(..)
-        //   java: Validate.notNull(action, "`action` must not be null when building `ButtonOption`");
-        return (ButtonOptionImpl::new(compat::read(__this, |__t| __t.name.clone()).unwrap(), Some(compat::read(__this, |__t| __t.description.clone())), compat::read(__this, |__t| __t.action.clone()).clone().unwrap(), compat::read(__this, |__t| __t.text.clone()), compat::read(__this, |__t| __t.available)) as compat::Shared<dyn ButtonOption>);
+    fn build(self) -> Arc<dyn ButtonOption> {
+        let name = self.name.expect("`name` must not be null when building `ButtonOption`");
+        let action = self.action.expect("`action` must not be null when building `ButtonOption`");
+        ButtonOptionImpl::new(name, self.description, action, self.text, self.available)
     }
-
-    /// BuilderImpl.build as the dispatch of Builder.build
-    pub fn build_dyn(__this: &compat::Shared<dyn Builder>) -> compat::Shared<dyn ButtonOption> {
-        Self::build_impl(&compat::view_as::<Self, _, Self>(__this, |a| a))
-    }
-
 }

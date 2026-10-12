@@ -5,5 +5,6 @@ pub mod config_field;
 pub mod config_serializer;
 pub mod field_access;
 pub mod read_only_field_access;
+pub mod serial_entry;
 pub mod serial_field;
 pub mod serializer;

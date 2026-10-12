@@ -2,35 +2,40 @@
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use mcrust::com::mojang::serialization::codec::Codec;
 use mcrust::com::mojang::serialization::codec::CodecRef;
 use mcrust::com::mojang::serialization::decoder::Decoder as _;
 use mcrust::com::mojang::serialization::encoder::Encoder as _;
 
 /// java: public class CodecSerializerAdapter<T> implements JsonSerializer<T>, JsonDeserializer<T>
-pub struct CodecSerializerAdapter<T> {
+///
+/// Gson's type adapter over a `Codec`. Registered on a `GsonBuilder` for `Component` (`GsonConfigSerializer.Builder`,
+/// `GsonConfigInstance`), it is built into each `Component` field's generated Gson form; these are its bodies.
+pub struct CodecSerializerAdapter<T: 'static> {
     /// java: private final Codec<T> codec;
     pub codec: CodecRef<T>,
 }
 
-impl<T: Clone + 'static> CodecSerializerAdapter<T> {
+impl<T: 'static> CodecSerializerAdapter<T> {
     /// java: public CodecSerializerAdapter(Codec<T> codec)
-    pub fn new(mut codec: CodecRef<T>) -> Self {
-        let __init_codec = codec.clone();
-        let mut this = Self {
-            codec: __init_codec,
-        };
-        this
+    pub fn new(codec: CodecRef<T>) -> Self {
+        Self { codec }
     }
 
     /// java: @Override public JsonElement serialize(T src, Type typeOfSrc, JsonSerializationContext context)
-    pub fn serialize(&self, src: &T, type_of_src: &crate::unresolved::Type, context: &crate::unresolved::JsonSerializationContext) -> serde_json::Value {
-        return (self.codec.encode_start(&mcrust::com::mojang::serialization::json_ops::JsonOps::instance(), src)).get_or_throw().unwrap();
+    pub fn serialize(&self, src: &T) -> serde_json::Value {
+        // java: codec.encodeStart(JsonOps.INSTANCE, src).getOrThrow()
+        match self.codec.encode_start(&mcrust::com::mojang::serialization::json_ops::JsonOps::instance(), src).get_or_throw() {
+            Ok(value) => compat::json_from_port(&value),
+            Err(message) => panic!("IllegalStateException: {}", message),
+        }
     }
 
     /// java: @Override public T deserialize(JsonElement json, Type typeOfT, JsonDeserializationContext context) throws JsonParseException
-    pub fn deserialize(&self, json: &serde_json::Value, type_of_t: &crate::unresolved::Type, context: &crate::unresolved::JsonDeserializationContext) -> T {
-        return (self.codec.parse(&mcrust::com::mojang::serialization::json_ops::JsonOps::instance(), &compat::json_to_port(json))).get_or_throw().unwrap();
+    pub fn deserialize(&self, json: &serde_json::Value) -> T {
+        // java: codec.parse(JsonOps.INSTANCE, json).getOrThrow()
+        match self.codec.parse(&mcrust::com::mojang::serialization::json_ops::JsonOps::instance(), &compat::json_to_port(json)).get_or_throw() {
+            Ok(value) => value,
+            Err(message) => panic!("IllegalStateException: {}", message),
+        }
     }
-
 }

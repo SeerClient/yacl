@@ -6,91 +6,110 @@ use crate::dev::isxander::yacl3::config::v2::api::autogen::auto_gen::AutoGen;
 use crate::dev::isxander::yacl3::config::v2::api::autogen::auto_gen_field::AutoGenField;
 use crate::dev::isxander::yacl3::config::v2::api::config_class_handler::ConfigClassHandler;
 use crate::dev::isxander::yacl3::config::v2::api::config_field::ConfigField;
+use crate::dev::isxander::yacl3::config::v2::api::field_access::FieldAccess;
+use crate::dev::isxander::yacl3::config::v2::api::read_only_field_access::ReadOnlyFieldAccess;
 use crate::dev::isxander::yacl3::config::v2::api::serial_entry::SerialEntry;
 use crate::dev::isxander::yacl3::config::v2::api::serial_field::SerialField;
 use crate::dev::isxander::yacl3::config::v2::r#impl::reflection_field_access::ReflectionFieldAccess;
 
 /// java: public class ConfigFieldImpl<T> implements ConfigField<T>
-pub struct ConfigFieldImpl<T> {
-    /// java: private ReflectionFieldAccess<T> field;
-    pub field: ReflectionFieldAccess<T>,
+pub struct ConfigFieldImpl<T: 'static> {
+    /// java: private ReflectionFieldAccess<T> field; (replaced by `setFieldAccess` when a load succeeds)
+    pub field: std::cell::RefCell<Arc<ReflectionFieldAccess<T>>>,
     /// java: private final ReflectionFieldAccess<T> defaultField;
-    pub default_field: ReflectionFieldAccess<T>,
+    pub default_field: Arc<ReflectionFieldAccess<T>>,
     /// java: private final ConfigClassHandler<?> parent;
-    pub parent: compat::Shared<dyn ConfigClassHandler<compat::Object>>,
+    pub parent: Arc<dyn ConfigClassHandler<compat::Object>>,
     /// java: private final Optional<SerialField> serial;
-    pub serial: Option<compat::Shared<dyn SerialField>>,
+    pub serial: Option<Arc<dyn SerialField>>,
     /// java: private final Optional<AutoGenField> autoGen;
-    pub auto_gen: Option<compat::Shared<dyn AutoGenField>>,
-    /// the object's own shared handle: Java's `this` handed to other objects
-    pub self_ref: compat::WeakShared<Self>,
+    pub auto_gen: Option<Arc<dyn AutoGenField>>,
 }
 
-impl<T: Clone + 'static> ConfigFieldImpl<T> {
-    /// java: public ConfigFieldImpl( ReflectionFieldAccess<T> field, ReflectionFieldAccess<T> defaultField, ConfigClassHandler<?> parent, @Nullable SerialEntry config, @Nullable SerialEntry inheritedConfig, @Nulla
-    pub fn new(mut field: ReflectionFieldAccess<T>, mut default_field: ReflectionFieldAccess<T>, mut parent: compat::Shared<dyn ConfigClassHandler<compat::Object>>, mut config: Option<SerialEntry>, mut inherited_config: Option<SerialEntry>, mut auto_gen: Option<AutoGen>) -> compat::Shared<Self> {
-        let __init_field = field.clone();
-        let __init_default_field = default_field.clone();
-        let __init_parent = parent.clone();
-        let __this = compat::shared(Self {
-            self_ref: std::sync::Weak::new(),
-            field: __init_field,
-            default_field: __init_default_field,
-            parent: __init_parent,
-            serial: Default::default(),
-            auto_gen: Default::default(),
-        });
-        compat::write(&__this, |__t| __t.self_ref = std::sync::Arc::downgrade(&__this));
-        if let Some(config) = &config {
-            { let __v = Some(SerialFieldImpl::new((if "" == config.value() { field.name() } else { config.value() }), (if "" == config.comment() { None } else { Some(config.comment()) }), config.required(), config.nullable())); compat::write(&__this, |__t| __t.serial = __v); }
+impl<T: Clone + Send + Sync + 'static> ConfigFieldImpl<T> {
+    /// java: public ConfigFieldImpl(ReflectionFieldAccess<T> field, ReflectionFieldAccess<T> defaultField, ConfigClassHandler<?> parent, @Nullable SerialEntry config, @Nullable SerialEntry inheritedConfig, @Nullable AutoGen autoGen)
+    pub fn new(
+        field: ReflectionFieldAccess<T>,
+        default_field: ReflectionFieldAccess<T>,
+        parent: Arc<dyn ConfigClassHandler<compat::Object>>,
+        config: Option<SerialEntry>,
+        inherited_config: Option<SerialEntry>,
+        auto_gen: Option<AutoGen>,
+    ) -> Arc<Self> {
+        let serial: Option<Arc<dyn SerialField>> = if let Some(config) = &config {
+            Some(Arc::new(SerialFieldImpl::new(
+                if "" == config.value() { field.name() } else { config.value() },
+                if "" == config.comment() { None } else { Some(config.comment()) },
+                config.required(),
+                config.nullable(),
+            )))
+        } else if let Some(inherited_config) = &inherited_config {
+            Some(Arc::new(SerialFieldImpl::new(field.name(), None, inherited_config.required(), inherited_config.nullable())))
         } else {
-            if let Some(inherited_config) = &inherited_config {
-                { let __v = Some(SerialFieldImpl::new(field.name(), None, inherited_config.required(), inherited_config.nullable())); compat::write(&__this, |__t| __t.serial = __v); }
-            } else {
-                { let __v = None; compat::write(&__this, |__t| __t.serial = __v); }
-            }
-        }
-        { let __v = (if auto_gen.is_some() { Some(AutoGenFieldImpl::new(auto_gen.as_ref().unwrap().category(), (if "" == auto_gen.as_ref().unwrap().group() { None } else { Some(auto_gen.as_ref().unwrap().group()) }))) } else { None }); compat::write(&__this, |__t| __t.auto_gen = __v); }
-        __this
+            None
+        };
+        let auto_gen: Option<Arc<dyn AutoGenField>> = match &auto_gen {
+            Some(auto_gen) => Some(Arc::new(AutoGenFieldImpl::<T>::new(
+                auto_gen.category(),
+                if "" == auto_gen.group() { None } else { Some(auto_gen.group()) },
+            ))),
+            None => None,
+        };
+        Arc::new(Self {
+            field: std::cell::RefCell::new(Arc::new(field)),
+            default_field: Arc::new(default_field),
+            parent,
+            serial,
+            auto_gen,
+        })
+    }
+
+    /// java: @Override public ReflectionFieldAccess<T> access() - the covariant return (`ConfigClassHandlerImpl.load`
+    /// reads `field.access().field()`)
+    pub fn reflection_access(&self) -> Arc<ReflectionFieldAccess<T>> {
+        self.field.borrow().clone()
+    }
+
+    /// java: @Override public ReflectionFieldAccess<T> defaultAccess() - the covariant return
+    pub fn reflection_default_access(&self) -> Arc<ReflectionFieldAccess<T>> {
+        self.default_field.clone()
     }
 
     /// java: public void setFieldAccess(ReflectionFieldAccess<T> field)
-    pub fn set_field_access(__this: &compat::Shared<Self>, mut field: ReflectionFieldAccess<T>) {
-        { let __v = field.clone(); compat::write(__this, |__t| __t.field = __v); }
+    pub fn set_field_access(&self, field: Arc<ReflectionFieldAccess<T>>) {
+        *self.field.borrow_mut() = field;
     }
-
 }
 
-impl<T: Clone + 'static> ConfigField<T> for ConfigFieldImpl<T> {
+impl<T: Clone + Send + Sync + 'static> ConfigField<T> for ConfigFieldImpl<T> {
     fn as_any(&self) -> &dyn std::any::Any {
         self
     }
 
     /// java: @Override public ReflectionFieldAccess<T> access()
-    fn access(&self) -> ReflectionFieldAccess<T> {
-        return self.field.clone();
+    fn access(&self) -> Arc<dyn FieldAccess<T>> {
+        self.reflection_access()
     }
 
     /// java: @Override public ReflectionFieldAccess<T> defaultAccess()
-    fn default_access(&self) -> ReflectionFieldAccess<T> {
-        return self.default_field.clone();
+    fn default_access(&self) -> Arc<dyn ReadOnlyFieldAccess<T>> {
+        self.default_field.clone()
     }
 
     /// java: @Override public ConfigClassHandler<?> parent()
-    fn parent(&self) -> compat::Shared<dyn ConfigClassHandler<compat::Object>> {
-        return self.parent.clone();
+    fn parent(&self) -> Arc<dyn ConfigClassHandler<compat::Object>> {
+        self.parent.clone()
     }
 
     /// java: @Override public Optional<SerialField> serial()
-    fn serial(&self) -> Option<compat::Shared<dyn SerialField>> {
-        return self.serial.clone();
+    fn serial(&self) -> Option<Arc<dyn SerialField>> {
+        self.serial.clone()
     }
 
     /// java: @Override public Optional<AutoGenField> autoGen()
-    fn auto_gen(&self) -> Option<compat::Shared<dyn AutoGenField>> {
-        return self.auto_gen.clone();
+    fn auto_gen(&self) -> Option<Arc<dyn AutoGenField>> {
+        self.auto_gen.clone()
     }
-
 }
 
 /// java: private record SerialFieldImpl(String serialName, Optional<String> comment, boolean required, boolean nullable) implements SerialField
@@ -108,69 +127,69 @@ pub struct SerialFieldImpl {
 
 impl SerialFieldImpl {
     /// java: the canonical record constructor
-    pub fn new(mut serial_name: String, mut comment: Option<String>, mut required: bool, mut nullable: bool) -> Self {
+    pub fn new(serial_name: String, comment: Option<String>, required: bool, nullable: bool) -> Self {
         Self { serial_name, comment, required, nullable }
     }
+}
 
+impl SerialField for SerialFieldImpl {
     /// java: the record accessor `serialName()`
-    pub fn serial_name(&self) -> String {
+    fn serial_name(&self) -> String {
         self.serial_name.clone()
     }
 
     /// java: the record accessor `comment()`
-    pub fn comment(&self) -> Option<String> {
+    fn comment(&self) -> Option<String> {
         self.comment.clone()
     }
 
     /// java: the record accessor `required()`
-    pub fn required(&self) -> bool {
+    fn required(&self) -> bool {
         self.required
     }
 
     /// java: the record accessor `nullable()`
-    pub fn nullable(&self) -> bool {
+    fn nullable(&self) -> bool {
         self.nullable
     }
-
-}
-
-impl SerialField for SerialFieldImpl {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
 }
 
 /// java: private record AutoGenFieldImpl<T>(String category, Optional<String> group) implements AutoGenField
-#[derive(Clone, Debug, PartialEq)]
 pub struct AutoGenFieldImpl<T> {
     /// java: String category
     pub category: String,
     /// java: Optional<String> group
     pub group: Option<String>,
+    _type: std::marker::PhantomData<fn() -> T>,
 }
 
-impl<T: Clone + 'static> AutoGenFieldImpl<T> {
+impl<T> AutoGenFieldImpl<T> {
     /// java: the canonical record constructor
-    pub fn new(mut category: String, mut group: Option<String>) -> Self {
-        Self { category, group }
+    pub fn new(category: String, group: Option<String>) -> Self {
+        Self { category, group, _type: std::marker::PhantomData }
     }
+}
 
+impl<T> Clone for AutoGenFieldImpl<T> {
+    fn clone(&self) -> Self {
+        Self::new(self.category.clone(), self.group.clone())
+    }
+}
+
+impl<T> PartialEq for AutoGenFieldImpl<T> {
+    fn eq(&self, other: &Self) -> bool {
+        self.category == other.category && self.group == other.group
+    }
+}
+
+impl<T: 'static> AutoGenField for AutoGenFieldImpl<T> {
     /// java: the record accessor `category()`
-    pub fn category(&self) -> String {
+    fn category(&self) -> String {
         self.category.clone()
     }
 
     /// java: the record accessor `group()`
-    pub fn group(&self) -> Option<String> {
+    fn group(&self) -> Option<String> {
         self.group.clone()
     }
-
-}
-
-impl<T: Clone + 'static> AutoGenField for AutoGenFieldImpl<T> {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
 }

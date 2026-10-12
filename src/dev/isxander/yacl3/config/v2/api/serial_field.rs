@@ -4,18 +4,18 @@
 use crate::prelude::*;
 
 /// java: public interface SerialField
+///
+/// The backing interface for the `@SerialEntry` annotation.
 pub trait SerialField: compat::DynAny {
-    fn as_any(&self) -> &dyn std::any::Any;
-    /// java: String serialName(); (dispatch: the body for this class)
-    fn serial_name(&self) -> fn(&compat::Shared<dyn SerialField>) -> String;
+    /// java: String serialName();
+    fn serial_name(&self) -> String;
 
-    /// java: Optional<String> comment(); (dispatch: the body for this class)
-    fn comment(&self) -> fn(&compat::Shared<dyn SerialField>) -> Option<String>;
+    /// java: Optional<String> comment();
+    fn comment(&self) -> Option<String>;
 
-    /// java: boolean required(); (dispatch: the body for this class)
-    fn required(&self) -> fn(&compat::Shared<dyn SerialField>) -> bool;
+    /// java: boolean required();
+    fn required(&self) -> bool;
 
-    /// java: boolean nullable(); (dispatch: the body for this class)
-    fn nullable(&self) -> fn(&compat::Shared<dyn SerialField>) -> bool;
-
+    /// java: boolean nullable();
+    fn nullable(&self) -> bool;
 }

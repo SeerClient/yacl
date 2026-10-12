@@ -1,37 +1,38 @@
-//! Ported from dev.isxander.yacl3.api.PlaceholderCategory by fabric2seer.
+//! Ported from dev.isxander.yacl3.api.PlaceholderCategory.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::config_category::ConfigCategory;
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
 use crate::dev::isxander::yacl3::r#impl::placeholder_category_impl::BuilderImpl;
+use mcrust::net::minecraft::client::minecraft::Minecraft;
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
+
+/// java: `BiFunction<Minecraft, YACLScreen, Screen>` - the screen a placeholder tab opens.
+pub type ScreenFunction = Arc<dyn Fn(&mut Minecraft, &Arc<YACLScreen>) -> compat::ScreenRef>;
 
 /// java: public interface PlaceholderCategory extends ConfigCategory
 pub trait PlaceholderCategory: ConfigCategory {
-    /// java: BiFunction<Minecraft, YACLScreen, Screen> screen(); (dispatch: the body for this class)
-    fn screen(&self) -> fn(&compat::Shared<dyn PlaceholderCategory>) -> Arc<dyn Fn(mcrust::net::minecraft::client::minecraft::Minecraft, compat::Shared<YACLScreen>) -> mcrust::net::minecraft::client::gui::screens::screen::Screen>;
-
+    /// java: BiFunction<Minecraft, YACLScreen, Screen> screen();
+    fn screen(&self) -> ScreenFunction;
 }
 
 /// java: static Builder createBuilder()
-pub fn create_builder() -> compat::Shared<dyn Builder> {
-    return (BuilderImpl::new() as compat::Shared<dyn Builder>);
+pub fn create_builder() -> BuilderImpl {
+    BuilderImpl::new()
 }
 
 /// java: interface Builder
-pub trait Builder: compat::DynAny {
-    fn as_any(&self) -> &dyn std::any::Any;
-    /// java: Builder name(@NotNull Component name); (dispatch: the body for this class)
-    fn name(&self) -> fn(&compat::Shared<dyn Builder>, MutableComponent) -> compat::Shared<dyn Builder>;
+pub trait Builder: Sized {
+    /// java: Builder name(@NotNull Component name);
+    fn name(self, name: MutableComponent) -> Self;
 
-    /// java: Builder tooltip(@NotNull Component... tooltips); (dispatch: the body for this class)
-    fn tooltip(&self) -> fn(&compat::Shared<dyn Builder>, &Vec<MutableComponent>) -> compat::Shared<dyn Builder>;
+    /// java: Builder tooltip(@NotNull Component... tooltips);
+    fn tooltip(self, tooltips: Vec<MutableComponent>) -> Self;
 
-    /// java: Builder screen(@NotNull BiFunction<Minecraft, YACLScreen, Screen> screenFunction); (dispatch: the body for this class)
-    fn screen(&self) -> fn(&compat::Shared<dyn Builder>, Arc<dyn Fn(mcrust::net::minecraft::client::minecraft::Minecraft, compat::Shared<YACLScreen>) -> mcrust::net::minecraft::client::gui::screens::screen::Screen>) -> compat::Shared<dyn Builder>;
+    /// java: Builder screen(@NotNull BiFunction<Minecraft, YACLScreen, Screen> screenFunction);
+    fn screen(self, screen_function: impl Fn(&mut Minecraft, &Arc<YACLScreen>) -> compat::ScreenRef + 'static) -> Self;
 
-    /// java: PlaceholderCategory build(); (dispatch: the body for this class)
-    fn build(&self) -> fn(&compat::Shared<dyn Builder>) -> compat::Shared<dyn PlaceholderCategory>;
-
+    /// java: PlaceholderCategory build();
+    fn build(self) -> Arc<dyn PlaceholderCategory>;
 }

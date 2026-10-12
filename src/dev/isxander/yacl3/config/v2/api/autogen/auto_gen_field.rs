@@ -4,12 +4,12 @@
 use crate::prelude::*;
 
 /// java: public interface AutoGenField
+///
+/// Backing interface for the `@AutoGen` annotation.
 pub trait AutoGenField: compat::DynAny {
-    fn as_any(&self) -> &dyn std::any::Any;
-    /// java: String category(); (dispatch: the body for this class)
-    fn category(&self) -> fn(&compat::Shared<dyn AutoGenField>) -> String;
+    /// java: String category();
+    fn category(&self) -> String;
 
-    /// java: Optional<String> group(); (dispatch: the body for this class)
-    fn group(&self) -> fn(&compat::Shared<dyn AutoGenField>) -> Option<String>;
-
+    /// java: Optional<String> group();
+    fn group(&self) -> Option<String>;
 }

@@ -2,6 +2,10 @@
 
 #[allow(unused_imports)]
 use crate::prelude::*;
+use crate::dev::isxander::yacl3::api::option::AnyOption;
+use crate::dev::isxander::yacl3::api::option::Option as YaclOption;
+use crate::dev::isxander::yacl3::config::v2::api::autogen::auto_gen_field::AutoGenField;
+use crate::dev::isxander::yacl3::config::v2::api::autogen::boolean::Boolean;
 use crate::dev::isxander::yacl3::config::v2::api::autogen::color_field::ColorField;
 use crate::dev::isxander::yacl3::config::v2::api::autogen::double_field::DoubleField;
 use crate::dev::isxander::yacl3::config::v2::api::autogen::double_slider::DoubleSlider;
@@ -21,7 +25,11 @@ use crate::dev::isxander::yacl3::config::v2::api::autogen::option_access::Option
 use crate::dev::isxander::yacl3::config::v2::api::autogen::option_factory::OptionFactory;
 use crate::dev::isxander::yacl3::config::v2::api::autogen::string_field::StringField;
 use crate::dev::isxander::yacl3::config::v2::api::autogen::tick_box::TickBox;
+use crate::dev::isxander::yacl3::config::v2::api::config_class_handler::ConfigClassHandler;
 use crate::dev::isxander::yacl3::config::v2::api::config_field::ConfigField;
+use crate::dev::isxander::yacl3::config::v2::api::field_access::FieldAccess;
+use crate::dev::isxander::yacl3::config::v2::api::read_only_field_access::ReadOnlyFieldAccess;
+use crate::dev::isxander::yacl3::config::v2::api::serial_field::SerialField;
 use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::boolean_impl::BooleanImpl;
 use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::color_field_impl::ColorFieldImpl;
 use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::double_field_impl::DoubleFieldImpl;
@@ -34,80 +42,257 @@ use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::int_field_impl::In
 use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::int_slider_impl::IntSliderImpl;
 use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::item_field_impl::ItemFieldImpl;
 use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::label_impl::LabelImpl;
-use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::list_group_impl::ListGroupImpl;
+use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::list_group_impl;
 use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::long_field_impl::LongFieldImpl;
 use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::long_slider_impl::LongSliderImpl;
 use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::master_tick_box_impl::MasterTickBoxImpl;
 use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::string_field_impl::StringFieldImpl;
 use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::tick_box_impl::TickBoxImpl;
+use crate::dev::isxander::yacl3::config::v2::r#impl::autogen::yacl_auto_gen_exception::YACLAutoGenException;
+use crate::dev::isxander::yacl3::config::v2::r#impl::reflection_field_access::object_from;
+use crate::dev::isxander::yacl3::config::v2::r#impl::reflection_field_access::object_to;
+use crate::dev::isxander::yacl3::config::v2::r#impl::reflection_field_access::Field;
+use crate::dev::isxander::yacl3::config::v2::r#impl::reflection_field_access::FieldType;
+use crate::dev::isxander::yacl3::config::v2::r#impl::reflection_field_access::ReflectionFieldAccess;
+use crate::dev::isxander::yacl3::config::v2::r#impl::reflection_field_access::TypeClass;
+use crate::dev::isxander::yacl3::r#impl::utils::yacl_constants::LOGGER;
+use std::any::TypeId;
 
-/// java: private static final Map<Class<?>, OptionFactory<?, ?>> factoryMap = new HashMap<>();
-pub static FACTORY_MAP: compat::MainThread<std::collections::HashMap<compat::ClassOf<compat::Object>, compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>>> = compat::MainThread::new(|| std::collections::HashMap::new());
+/// `OptionFactory<?, ?>` as the registry holds it: `factory.createOption(annotation, configField, storage)` with the
+/// annotation and the field as Java's erased `Annotation` / `ConfigField<?>`, the option answered as `Option<?>`.
+pub type ErasedOptionFactory = Arc<dyn Fn(&compat::Object, &Arc<dyn ConfigField<compat::Object>>, &Arc<dyn OptionAccess>) -> Arc<dyn AnyOption>>;
+
+thread_local! {
+    /// java: private static final Map<Class<?>, OptionFactory<?, ?>> factoryMap = new HashMap<>(); - and the
+    /// class's `static { registerOptionFactory(..) }` block, which fills it on first use
+    static FACTORY_MAP: std::cell::RefCell<std::collections::HashMap<TypeId, ErasedOptionFactory>> =
+        std::cell::RefCell::new(OptionFactoryRegistry::static_init());
+}
 
 /// java: public class OptionFactoryRegistry
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct OptionFactoryRegistry {}
 
 impl OptionFactoryRegistry {
-    /// java: static { .. } - Java runs it when the class is first used; every static method and
-    /// constructor calls this first.
-    fn clinit() {
-        static ONCE: std::sync::Once = std::sync::Once::new();
-        ONCE.call_once(|| {
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<TickBox>(), (compat::shared(TickBoxImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<bool>(), (compat::shared(BooleanImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<IntSlider>(), (compat::shared(IntSliderImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<LongSlider>(), (compat::shared(LongSliderImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<FloatSlider>(), (compat::shared(FloatSliderImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<DoubleSlider>(), (compat::shared(DoubleSliderImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<IntField>(), (compat::shared(IntFieldImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<LongField>(), (compat::shared(LongFieldImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<FloatField>(), (compat::shared(FloatFieldImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<DoubleField>(), (compat::shared(DoubleFieldImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<EnumCycler>(), (compat::shared(EnumCyclerImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<StringField>(), (compat::shared(StringFieldImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<ColorField>(), (compat::shared(ColorFieldImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<Dropdown>(), (compat::shared(DropdownImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<ItemField>(), (compat::shared(ItemFieldImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<Label>(), (compat::shared(LabelImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<ListGroup>(), (compat::shared(ListGroupImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-            OptionFactoryRegistry::register_option_factory(std::any::TypeId::of::<MasterTickBox>(), (compat::shared(MasterTickBoxImpl::new()) as compat::Shared<dyn OptionFactory<compat::Object, compat::Object>>));
-        });
-    }
-
-    /// java: the implicit no-argument constructor
-    pub fn new() -> Self {
-        Self::clinit();
-        let mut this = Self {
-        };
-        this
+    /// java: static { .. } - the 18 built-in factories
+    fn static_init() -> std::collections::HashMap<TypeId, ErasedOptionFactory> {
+        let mut factory_map: std::collections::HashMap<TypeId, ErasedOptionFactory> = std::collections::HashMap::new();
+        factory_map.insert(TypeId::of::<TickBox>(), erase::<TickBox, bool>(Arc::new(TickBoxImpl::new())));
+        factory_map.insert(TypeId::of::<Boolean>(), erase::<Boolean, bool>(Arc::new(BooleanImpl::new())));
+        factory_map.insert(TypeId::of::<IntSlider>(), erase::<IntSlider, i32>(Arc::new(IntSliderImpl::new())));
+        factory_map.insert(TypeId::of::<LongSlider>(), erase::<LongSlider, i64>(Arc::new(LongSliderImpl::new())));
+        factory_map.insert(TypeId::of::<FloatSlider>(), erase::<FloatSlider, f32>(Arc::new(FloatSliderImpl::new())));
+        factory_map.insert(TypeId::of::<DoubleSlider>(), erase::<DoubleSlider, f64>(Arc::new(DoubleSliderImpl::new())));
+        factory_map.insert(TypeId::of::<IntField>(), erase::<IntField, i32>(Arc::new(IntFieldImpl::new())));
+        factory_map.insert(TypeId::of::<LongField>(), erase::<LongField, i64>(Arc::new(LongFieldImpl::new())));
+        factory_map.insert(TypeId::of::<FloatField>(), erase::<FloatField, f32>(Arc::new(FloatFieldImpl::new())));
+        factory_map.insert(TypeId::of::<DoubleField>(), erase::<DoubleField, f64>(Arc::new(DoubleFieldImpl::new())));
+        factory_map.insert(
+            TypeId::of::<EnumCycler>(),
+            erase::<EnumCycler, crate::dev::isxander::yacl3::config::v2::r#impl::reflection_field_access::EnumValue>(Arc::new(EnumCyclerImpl::new())),
+        );
+        factory_map.insert(TypeId::of::<StringField>(), erase::<StringField, String>(Arc::new(StringFieldImpl::new())));
+        factory_map.insert(TypeId::of::<ColorField>(), erase::<ColorField, mcrust::java::awt::color::Color>(Arc::new(ColorFieldImpl::new())));
+        factory_map.insert(TypeId::of::<Dropdown>(), erase::<Dropdown, String>(Arc::new(DropdownImpl::new())));
+        factory_map.insert(
+            TypeId::of::<ItemField>(),
+            erase::<ItemField, compat::JavaRef<mcrust::net::minecraft::world::item::item::Item>>(Arc::new(ItemFieldImpl::new())),
+        );
+        factory_map.insert(
+            TypeId::of::<Label>(),
+            erase::<Label, mcrust::net::minecraft::network::chat::mutable_component::MutableComponent>(Arc::new(LabelImpl::new())),
+        );
+        // java: new ListGroupImpl<>() - a raw ListGroupImpl whose element type Java erases; Rust instantiates
+        // `ListGroupImpl<X>` per field (the field's generated `list_group`, see list_group_impl::create_erased)
+        factory_map.insert(TypeId::of::<ListGroup>(), list_group_impl::erased_factory());
+        factory_map.insert(TypeId::of::<MasterTickBox>(), erase::<MasterTickBox, bool>(Arc::new(MasterTickBoxImpl::new())));
+        factory_map
     }
 
     /// java: public static <A extends Annotation, T> void registerOptionFactory(Class<A> annotation, OptionFactory<A, T> factory)
-    pub fn register_option_factory<A: 'static, T: 'static>(mut annotation: compat::ClassOf<A>, mut factory: compat::Shared<dyn OptionFactory<A, T>>) {
-        Self::clinit();
-        FACTORY_MAP.get_mut().insert(annotation.clone(), factory.clone());
+    pub fn register_option_factory<A: Clone + Send + Sync + 'static, T: Clone + Send + Sync + 'static>(
+        annotation: &TypeId,
+        factory: Arc<dyn OptionFactory<A, T>>,
+    ) {
+        let erased = erase(factory);
+        FACTORY_MAP.with(|factory_map| factory_map.borrow_mut().insert(*annotation, erased));
     }
 
     /// java: public static <T> Optional<Option<T>> createOption(Field field, ConfigField<T> configField, OptionAccess storage)
-    pub fn create_option<T: 'static>(field: &crate::unresolved::Field, config_field: &compat::Shared<dyn ConfigField<T>>, storage: &compat::Shared<dyn OptionAccess>) -> Option<compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<T>>> {
-        Self::clinit();
-        // TODO(fabric2seer): `.getAnnotations(..)` on a Field
-        //   java: Annotation[] annotations = Arrays.stream(field.getAnnotations())
-        //   java:                 .filter(annotation -> factoryMap.containsKey(annotation.annotationType()))
-        //   java:                 .toArray(Annotation[]::new);
-        let mut annotations: Vec<crate::unresolved::Annotation> = todo!("fabric2seer: the initialiser of `annotations` (TODO above)");
-        if (annotations.len() as i32) != 1 {
-            logger().warn(&format!("Found {} option factory annotations on field {}, expected 1", (annotations.len() as i32), compat::jstring(&field)));
-            if (annotations.len() as i32) == 0 {
+    pub fn create_option(
+        field: &Field,
+        config_field: &Arc<dyn ConfigField<compat::Object>>,
+        storage: &Arc<dyn OptionAccess>,
+    ) -> Option<Arc<dyn AnyOption>> {
+        let annotations: Vec<compat::Object> = FACTORY_MAP.with(|factory_map| {
+            let factory_map = factory_map.borrow();
+            field
+                .get_annotations()
+                .into_iter()
+                .filter(|annotation| factory_map.contains_key(&std::any::Any::type_id(&**annotation)))
+                .collect()
+        });
+
+        if annotations.len() != 1 {
+            LOGGER.warn(&format!("Found {} option factory annotations on field {}, expected 1", annotations.len(), field));
+
+            if annotations.is_empty() {
                 return None;
             }
         }
-        let annotation = &annotations[(0) as usize];
-        // TODO(fabric2seer): `.annotationType(..)` on a Annotation
-        //   java: OptionFactory<Annotation, T> factory = (OptionFactory<Annotation, T>) factoryMap.get(annotation.annotationType());
-        let mut factory: compat::Shared<dyn OptionFactory<crate::unresolved::Annotation, T>> = todo!("fabric2seer: the initialiser of `factory` (TODO above)");
-        return Some(factory.lock().borrow().create_option(annotation, config_field, storage));
+
+        let annotation = annotations[0].clone();
+        // noinspection unchecked
+        let factory: ErasedOptionFactory = FACTORY_MAP.with(|factory_map| {
+            factory_map.borrow().get(&std::any::Any::type_id(&*annotation)).cloned().expect("registered above")
+        });
+        Some(factory(&annotation, config_field, storage))
+    }
+}
+
+/// `(OptionFactory<Annotation, T>) factory`: the factory over the erased annotation and field. The annotation is
+/// cast to `A` (Java's unchecked cast), the field viewed as a `ConfigField<T>`.
+fn erase<A: Clone + Send + Sync + 'static, T: Clone + Send + Sync + 'static>(factory: Arc<dyn OptionFactory<A, T>>) -> ErasedOptionFactory {
+    Arc::new(move |annotation: &compat::Object, config_field: &Arc<dyn ConfigField<compat::Object>>, storage: &Arc<dyn OptionAccess>| {
+        let annotation: A = match (**annotation).downcast_ref::<A>() {
+            Some(annotation) => annotation.clone(),
+            None => panic!("ClassCastException: an annotation of another class for {}", std::any::type_name::<A>()),
+        };
+        let typed: Arc<dyn ConfigField<T>> = Arc::new(TypedConfigField::<T>::new(config_field.clone()));
+        let option: Arc<dyn YaclOption<T>> = factory.create_option(&annotation, &typed, storage);
+        option as Arc<dyn AnyOption>
+    })
+}
+
+/// `(ConfigField<T>) configField` - a `ConfigField<?>` seen as the `ConfigField<T>` a factory for `T` takes (Java's
+/// unchecked generic cast). Every call goes to the field itself (so `access()` follows `setFieldAccess`); values cross
+/// as `Object` (`reflection_field_access::object_to` / `object_from`).
+pub struct TypedConfigField<T> {
+    inner: Arc<dyn ConfigField<compat::Object>>,
+    _type: std::marker::PhantomData<fn() -> T>,
+}
+
+impl<T> TypedConfigField<T> {
+    pub fn new(inner: Arc<dyn ConfigField<compat::Object>>) -> TypedConfigField<T> {
+        TypedConfigField { inner, _type: std::marker::PhantomData }
     }
 
+    /// the `ConfigField<?>` this views
+    pub fn erased(&self) -> Arc<dyn ConfigField<compat::Object>> {
+        self.inner.clone()
+    }
+}
+
+impl<T: Clone + Send + Sync + 'static> ConfigField<T> for TypedConfigField<T> {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
+    fn access(&self) -> Arc<dyn FieldAccess<T>> {
+        Arc::new(TypedFieldAccess::<T> { inner: self.inner.access(), _type: std::marker::PhantomData })
+    }
+
+    fn default_access(&self) -> Arc<dyn ReadOnlyFieldAccess<T>> {
+        Arc::new(TypedReadOnlyFieldAccess::<T> { inner: self.inner.default_access(), _type: std::marker::PhantomData })
+    }
+
+    fn parent(&self) -> Arc<dyn ConfigClassHandler<compat::Object>> {
+        self.inner.parent()
+    }
+
+    fn serial(&self) -> Option<Arc<dyn SerialField>> {
+        self.inner.serial()
+    }
+
+    fn auto_gen(&self) -> Option<Arc<dyn AutoGenField>> {
+        self.inner.auto_gen()
+    }
+}
+
+/// `(FieldAccess<T>) fieldAccess` (see [`TypedConfigField`])
+struct TypedFieldAccess<T> {
+    inner: Arc<dyn FieldAccess<compat::Object>>,
+    _type: std::marker::PhantomData<fn() -> T>,
+}
+
+impl<T: Clone + Send + Sync + 'static> ReadOnlyFieldAccess<T> for TypedFieldAccess<T> {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self.inner.as_any()
+    }
+
+    fn get(&self) -> T {
+        object_to::<T>(self.inner.get(), self.inner.type_class())
+    }
+
+    fn name(&self) -> String {
+        self.inner.name()
+    }
+
+    fn r#type(&self) -> FieldType {
+        self.inner.r#type()
+    }
+
+    fn type_class(&self) -> TypeClass {
+        self.inner.type_class()
+    }
+
+    fn get_annotation(&self, annotation_class: &TypeId) -> Option<compat::Object> {
+        self.inner.get_annotation(annotation_class)
+    }
+}
+
+impl<T: Clone + Send + Sync + 'static> FieldAccess<T> for TypedFieldAccess<T> {
+    fn set(&self, value: T) {
+        self.inner.set(object_from(value));
+    }
+}
+
+/// `(ReadOnlyFieldAccess<T>) fieldAccess` (see [`TypedConfigField`])
+struct TypedReadOnlyFieldAccess<T> {
+    inner: Arc<dyn ReadOnlyFieldAccess<compat::Object>>,
+    _type: std::marker::PhantomData<fn() -> T>,
+}
+
+impl<T: Clone + Send + Sync + 'static> ReadOnlyFieldAccess<T> for TypedReadOnlyFieldAccess<T> {
+    fn as_any(&self) -> &dyn std::any::Any {
+        self.inner.as_any()
+    }
+
+    fn get(&self) -> T {
+        object_to::<T>(self.inner.get(), self.inner.type_class())
+    }
+
+    fn name(&self) -> String {
+        self.inner.name()
+    }
+
+    fn r#type(&self) -> FieldType {
+        self.inner.r#type()
+    }
+
+    fn type_class(&self) -> TypeClass {
+        self.inner.type_class()
+    }
+
+    fn get_annotation(&self, annotation_class: &TypeId) -> Option<compat::Object> {
+        self.inner.get_annotation(annotation_class)
+    }
+}
+
+/// the field behind a `ConfigField<?>`'s access (`((ReflectionFieldAccess<?>) configField.access()).field()`)
+pub(crate) fn reflected_field(config_field: &Arc<dyn ConfigField<compat::Object>>) -> Field {
+    let access = config_field.access();
+    match access.as_any().downcast_ref::<ReflectionFieldAccess<compat::Object>>() {
+        Some(reflection) => reflection.field(),
+        None => panic!("ClassCastException: the field access of '{}' is not a ReflectionFieldAccess", access.name()),
+    }
+}
+
+/// Keeps `YACLAutoGenException` in this module's vocabulary for `ListGroup`'s missing instantiation.
+pub(crate) fn no_list_group_instantiation(field: &Field) -> ! {
+    YACLAutoGenException::new(format!(
+        "'{}': @ListGroup needs the field's element type, which the generated reflection did not record (DeclaredField.list_group)",
+        field.get_name()
+    ))
+    .throw()
 }

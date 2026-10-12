@@ -1,56 +1,42 @@
-//! Ported from dev.isxander.yacl3.impl.SelfContainedBinding by fabric2seer.
+//! Ported from dev.isxander.yacl3.impl.SelfContainedBinding.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::binding::Binding;
 
 /// java: public class SelfContainedBinding<T> implements Binding<T>
-#[derive(Clone)]
 pub struct SelfContainedBinding<T> {
     /// java: private T value;
-    pub value: Option<T>,
+    pub value: std::cell::RefCell<T>,
     /// java: private final T defaultValue;
-    pub default_value: Option<T>,
+    pub default_value: T,
 }
 
 impl<T: Clone + 'static> SelfContainedBinding<T> {
     /// java: public SelfContainedBinding(T value, T defaultValue)
-    pub fn new(mut value: T, mut default_value: T) -> Self {
-        let __init_value = Some(value.clone());
-        let __init_default_value = Some(default_value.clone());
-        let mut this = Self {
-            value: __init_value,
-            default_value: __init_default_value,
-        };
-        this
+    pub fn new(value: T, default_value: T) -> Self {
+        Self { value: std::cell::RefCell::new(value), default_value }
     }
 
     /// java: public SelfContainedBinding(T value)
-    pub fn new_1(mut value: T) -> Self {
-        let mut this = Self::new(value.clone(), value.clone());
-        this
+    pub fn new_1(value: T) -> Self {
+        Self::new(value.clone(), value)
     }
-
 }
 
 impl<T: Clone + 'static> Binding<T> for SelfContainedBinding<T> {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     /// java: @Override public void setValue(T value)
-    fn set_value(&mut self, mut value: T) {
-        self.value = Some(value.clone());
+    fn set_value(&self, value: T) {
+        *self.value.borrow_mut() = value;
     }
 
     /// java: @Override public T getValue()
     fn get_value(&self) -> T {
-        return self.value.clone().unwrap();
+        self.value.borrow().clone()
     }
 
     /// java: @Override public T defaultValue()
     fn default_value(&self) -> T {
-        return self.default_value.clone().unwrap();
+        self.default_value.clone()
     }
-
 }
