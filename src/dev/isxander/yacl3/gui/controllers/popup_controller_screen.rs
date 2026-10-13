@@ -1,206 +1,271 @@
-//! Ported from dev.isxander.yacl3.gui.controllers.PopupControllerScreen by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.controllers.PopupControllerScreen.
+//!
+//! `public class PopupControllerScreen extends Screen`: drawn and dispatched by itself like the YACL screen it is
+//! opened over (PATTERNS_Y2.md P3) - the game's stack holds its `ModScreen` adapter. Its only child is the popup, so
+//! `Screen`'s child list and focus are that one widget and two flags.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::gui::controllers::controller_popup_widget::ControllerPopupWidget;
+use crate::dev::isxander::yacl3::gui::controllers::controller_widget::ControllerWidget;
 use crate::dev::isxander::yacl3::gui::utils::gui_utils::GuiUtils;
-use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
-use mcrust::mcrust::modding::screens::ModScreen;
-use mcrust::mcrust::modding::screens::ScreenRenderContext;
-use mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor;
+use crate::dev::isxander::yacl3::gui::yacl_screen::{self, YACLScreen};
+use compat::Graphics;
+use mcrust::mcrust::modding::screens::{ModScreen, ScreenRenderContext};
+use mcrust::net::minecraft::client::gui::screens::screen::Screen;
 use mcrust::net::minecraft::client::input::character_event::CharacterEvent;
+use mcrust::net::minecraft::client::input::key_event::KeyEvent;
 use mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent;
-use mcrust::net::minecraft::client::input::mouse_button_info::MouseButtonInfo;
 use mcrust::net::minecraft::network::chat::component::Component as _;
+use std::cell::Cell;
 
 /// java: public class PopupControllerScreen extends Screen
 pub struct PopupControllerScreen {
-    /// java: extends net.minecraft.client.gui.screens.Screen
-    pub base: mcrust::net::minecraft::client::gui::screens::screen::Screen,
     /// java: private final YACLScreen backgroundYaclScreen;
-    pub background_yacl_screen: compat::Shared<YACLScreen>,
+    background_yacl_screen: Arc<YACLScreen>,
     /// java: private final ControllerPopupWidget<?> controllerPopup;
-    pub controller_popup: compat::Shared<dyn ControllerPopupWidget<compat::Object>>,
-    /// the screen's widgets as this object last saw them (see `compat::WidgetCache`)
-    pub __widgets: compat::WidgetCache,
-}
-
-impl std::ops::Deref for PopupControllerScreen {
-    type Target = mcrust::net::minecraft::client::gui::screens::screen::Screen;
-    fn deref(&self) -> &Self::Target {
-        &self.base
-    }
-}
-
-impl std::ops::DerefMut for PopupControllerScreen {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
-    }
+    controller_popup: Arc<dyn ControllerPopupWidget>,
+    /// `Screen.renderables` holds the popup once `init()` added it
+    added: Cell<bool>,
+    /// `AbstractContainerEventHandler.focused == controllerPopup`
+    focused: Cell<bool>,
+    /// `AbstractContainerEventHandler.isDragging`
+    dragging: Cell<bool>,
+    /// the cursor position the last frame saw (`mouseMoved` is driven from it: see `extract_render_state`)
+    last_mouse: Cell<Option<(i32, i32)>>,
 }
 
 impl PopupControllerScreen {
-    /// java: public PopupControllerScreen(YACLScreen backgroundYaclScreen, ControllerPopupWidget<?> controllerPopup)
-    pub fn new(mut background_yacl_screen: compat::Shared<YACLScreen>, mut controller_popup: compat::Shared<dyn ControllerPopupWidget<compat::Object>>) -> compat::Shared<Self> {
-        let __init_background_yacl_screen = background_yacl_screen.clone();
-        let __init_controller_popup = controller_popup.clone();
-        let __this = compat::shared(Self {
-            base: mcrust::net::minecraft::client::gui::screens::screen::Screen::new(controller_popup.lock().borrow().popup_title().get_string()),
-            __widgets: Default::default(),
-            background_yacl_screen: __init_background_yacl_screen,
-            controller_popup: __init_controller_popup,
-        });
-        __this
+    /// java: public PopupControllerScreen(YACLScreen backgroundYaclScreen, ControllerPopupWidget<?> controllerPopup) -
+    /// `super(controllerPopup.popupTitle())` (narrated)
+    pub fn new(background_yacl_screen: Arc<YACLScreen>, controller_popup: Arc<dyn ControllerPopupWidget>) -> Self {
+        Self {
+            background_yacl_screen,
+            controller_popup,
+            added: Cell::new(false),
+            focused: Cell::new(false),
+            dragging: Cell::new(false),
+            last_mouse: Cell::new(None),
+        }
+    }
+
+    /// `new PopupControllerScreen(this, controllerPopupWidget)` as `GuiUtils.setScreen` takes it: the screen over the
+    /// YACL screen, which stays below it (`onClose` returns to it).
+    pub fn new_screen(background_yacl_screen: &Arc<YACLScreen>, controller_popup: Arc<dyn ControllerPopupWidget>) -> compat::ScreenRef {
+        let screen = PopupControllerScreen::new(background_yacl_screen.clone(), controller_popup);
+        compat::ScreenRef::of_box(Box::new(PopupControllerScreenAdapter { screen: compat::RenderThread::new(screen) }), true)
     }
 
     /// java: @Override protected void init()
-    pub fn init(__this: &compat::Shared<Self>) {
-        let __r0 = compat::read(__this, |__t| __t.controller_popup.clone());
-        { let (__q0,) = (__r0,); __this.lock().borrow_mut().add_renderable_widget(__q0) };
+    fn init(&self) {
+        self.added.set(true);
+    }
+
+    /// `Screen.rebuildWidgets()`: `clearWidgets(); clearFocus(); init();`
+    fn rebuild_widgets(&self) {
+        self.added.set(false);
+        self.set_focused_popup(false);
+        self.init();
+    }
+
+    /// `setFocused(controllerPopup)` / `setFocused(null)` - `AbstractContainerEventHandler`'s
+    fn set_focused_popup(&self, focused: bool) {
+        if self.focused.get() != focused {
+            ControllerWidget::set_focused(&*self.controller_popup, focused);
+            self.focused.set(focused);
+        }
     }
 
     /// java: @Override protected void repositionElements()
-    pub fn reposition_elements(__this: &compat::Shared<Self>) {
-        // TODO(fabric2seer): `reposition_elements` takes 1 argument(s) in the port (`build: impl FnOnce(&mut Screen)`), Java passes 0
-        // rust: __this.lock().borrow_mut().base.reposition_elements();
-        PopupControllerScreen::on_close(__this);
+    fn reposition_elements(&self) {
+        self.rebuild_widgets();
+        self.on_close();
     }
 
-    /// java: @Override public void extractRenderState(@NonNull GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    pub fn extract_render_state(__this: &compat::Shared<Self>, graphics: &GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut a: f32) {
-        __this.lock().borrow_mut().controller_popup.extract_background(graphics, mouse_x, mouse_y, a);
-        // TODO(fabric2seer): `Screen.extractRenderState` has no Rust method in the port (looked for `extract_render_state` in Screen and JavaSrc)
-        // rust: let __wa1 = graphics.clone();
-        // rust: let __wa2 = a;
-        // rust: let __o1 = compat::read(__this, |__t| __t.background_yacl_screen.clone());
-        // rust: compat::write(&__o1, |__t| __t.extract_render_state(&__wa1, -1, -1, __wa2));
-        ();
+    /// java: @Override public void extractRenderState(@NonNull GuiGraphicsExtractor graphics, int mouseX, int mouseY,
+    /// float a)
+    pub fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+        self.controller_popup.extract_background(graphics, mouse_x, mouse_y, a);
+        // mouseX/Y set to -1 to prevent hovering outlines
+        self.background_yacl_screen.extract_render_state(graphics, -1, -1, a);
+        // super.extractRenderState - the popup
+        if self.added.get() {
+            ControllerWidget::extract_render_state(&*self.controller_popup, graphics, mouse_x, mouse_y, a);
+        }
     }
 
-    /// java: @Override public void extractBackground( GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick )
-    pub fn extract_background(__this: &compat::Shared<Self>, gui_graphics: &GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut partial_tick: f32) {
-        YACLScreen::extract_background(&compat::read(__this, |__t| __t.background_yacl_screen.clone()), gui_graphics, mouse_x, mouse_y, partial_tick);
+    /// java: @Override public void extractBackground(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float
+    /// partialTick) - the YACL screen's (the game has drawn `Screen`'s own background)
+    pub fn extract_background(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, partial_tick: f32) {
+        self.background_yacl_screen.extract_background(graphics, mouse_x, mouse_y, partial_tick);
     }
 
     /// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick)
-    pub fn mouse_clicked(__this: &compat::Shared<Self>, event: &MouseButtonEvent, mut double_click: bool) -> bool {
-        if !false {
-            PopupControllerScreen::on_close(__this);
+    pub fn mouse_clicked(&self, event: &MouseButtonEvent, double_click: bool) -> bool {
+        // super.mouseClicked - ContainerEventHandler's over the one child
+        let clicked = self.added.get() && ControllerWidget::is_mouse_over(&*self.controller_popup, event.x(), event.y()) && {
+            if ControllerWidget::mouse_clicked(&*self.controller_popup, event, double_click)
+                && ControllerWidget::should_take_focus_after_interaction(&*self.controller_popup)
+            {
+                self.set_focused_popup(true);
+                if event.button() == 0 {
+                    self.dragging.set(true);
+                }
+            }
+            true
+        };
+        if !clicked {
+            self.on_close();
             return false;
         }
-        return true;
+        true
+    }
+
+    /// `ContainerEventHandler.mouseReleased`
+    pub fn mouse_released(&self, event: &MouseButtonEvent) -> bool {
+        if event.button() == 0 && self.dragging.get() {
+            self.dragging.set(false);
+            if self.focused.get() {
+                return ControllerWidget::mouse_released(&*self.controller_popup, event);
+            }
+        }
+        false
+    }
+
+    /// `ContainerEventHandler.mouseDragged`
+    pub fn mouse_dragged(&self, event: &MouseButtonEvent, dx: f64, dy: f64) -> bool {
+        self.focused.get() && self.dragging.get() && event.button() == 0 && ControllerWidget::mouse_dragged(&*self.controller_popup, event, dx, dy)
     }
 
     /// java: @Override public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical)
-    pub fn mouse_scrolled(__this: &compat::Shared<Self>, mut mouse_x: f64, mut mouse_y: f64, mut horizontal: f64, mut vertical: f64) -> bool {
-        // TODO(fabric2seer): the condition: `mouseScrolled` is not a method of ControllerPopupWidget
-        //   java: controllerPopup.mouseScrolled(..)
-        if todo!("fabric2seer: the condition (TODO above)") {
+    pub fn mouse_scrolled(&self, mouse_x: f64, mouse_y: f64, horizontal: f64, vertical: f64) -> bool {
+        if ControllerWidget::mouse_scrolled(&*self.controller_popup, mouse_x, mouse_y, horizontal, vertical) {
             return true;
         }
-        // TODO(fabric2seer): `Screen.mouseScrolled` has no Rust method in the port (looked for `mouse_scrolled` in Screen and JavaSrc)
-        // rust: let __wa1 = mouse_x;
-        // rust: let __wa2 = mouse_y;
-        // rust: let __wa3 = horizontal;
-        // rust: let __wa4 = vertical;
-        // rust: let __o1 = compat::read(__this, |__t| __t.background_yacl_screen.clone());
-        // rust: compat::write(&__o1, |__t| __t.mouse_scrolled(__wa1, __wa2, __wa3, __wa4));
-        return false;
+        // mouseX & mouseY are needed here
+        self.background_yacl_screen.mouse_scrolled(mouse_x, mouse_y, horizontal, vertical);
+        // super.mouseScrolled - the child under the cursor
+        self.added.get()
+            && ControllerWidget::is_mouse_over(&*self.controller_popup, mouse_x, mouse_y)
+            && ControllerWidget::mouse_scrolled(&*self.controller_popup, mouse_x, mouse_y, horizontal, vertical)
     }
 
     /// java: @Override public void mouseMoved(double mouseX, double mouseY)
-    pub fn mouse_moved(__this: &compat::Shared<Self>, mut mouse_x: f64, mut mouse_y: f64) {
-        // TODO(fabric2seer): `mouseMoved` is not a method of ControllerPopupWidget
-        //   java: controllerPopup.mouseMoved(mouseX, mouseY);
+    pub fn mouse_moved(&self, mouse_x: f64, mouse_y: f64) {
+        ControllerWidget::mouse_moved(&*self.controller_popup, mouse_x, mouse_y);
     }
 
     /// java: @Override public boolean charTyped(@NonNull CharacterEvent characterEvent)
-    pub fn char_typed(__this: &compat::Shared<Self>, character_event: &CharacterEvent) -> bool {
-        // TODO(fabric2seer): `charTyped` is not a method of ControllerPopupWidget
-        //   java: return controllerPopup.charTyped(characterEvent);
-        todo!("fabric2seer: the value of this function is in a TODO above")
+    pub fn char_typed(&self, event: &CharacterEvent) -> bool {
+        ControllerWidget::char_typed(&*self.controller_popup, event)
     }
 
     /// java: @Override public boolean keyPressed(@NonNull KeyEvent keyEvent)
-    pub fn key_pressed(__this: &compat::Shared<Self>, key_event: &mcrust::net::minecraft::client::input::key_event::KeyEvent) -> bool {
-        return __this.lock().borrow().controller_popup.key_pressed(key_event);
+    pub fn key_pressed(&self, event: &KeyEvent) -> bool {
+        ControllerWidget::key_pressed(&*self.controller_popup, event)
     }
 
     /// java: @Override public void tick()
-    pub fn tick(__this: &compat::Shared<Self>) {
-        ();
-        YACLScreen::tick(&compat::read(__this, |__t| __t.background_yacl_screen.clone()));
+    pub fn tick(&self) {
+        self.background_yacl_screen.tick();
     }
 
     /// java: @Override public void onClose()
-    pub fn on_close(__this: &compat::Shared<Self>) {
-        GuiUtils::set_screen(&compat::read(__this, |__t| __t.background_yacl_screen.clone()), true);
-        __this.lock().borrow_mut().controller_popup.close();
+    pub fn on_close(&self) {
+        PopupControllerScreen::on_close_over(&self.background_yacl_screen, &self.controller_popup);
     }
 
-}
-
-/// PopupControllerScreen's `Screen` half (`super`'s fields and widget tree), lent by the game for each call
-impl compat::ScreenHalf for PopupControllerScreen {
-    fn screen_half(&mut self) -> &mut mcrust::net::minecraft::client::gui::screens::screen::Screen {
-        &mut self.base
-    }
-    fn screen_parts(&mut self) -> (&mut mcrust::net::minecraft::client::gui::screens::screen::Screen, Option<&mut compat::WidgetCache>) {
-        let __s = self;
-        (&mut __s.base, Some(&mut __s.__widgets))
+    /// `onClose()`'s body over the two objects it reads: `YACLScreen.clearPopupControllerWidget` runs it for the popup
+    /// screen that is up (`popupControllerScreen.onClose()`), which the YACL screen reaches through itself.
+    pub fn on_close_over(background_yacl_screen: &Arc<YACLScreen>, controller_popup: &Arc<dyn ControllerPopupWidget>) {
+        // GuiUtils.setScreen(backgroundYaclScreen, true); - the popup screen is no longer the current one from here on
+        background_yacl_screen.popup_screen_up.set(false);
+        GuiUtils::set_screen(compat::ScreenRef::Parent, true);
+        controller_popup.close();
     }
 }
 
-/// PopupControllerScreen as the game's screen: `game::set_screen(Box::new(compat::ScreenAdapter::new(..)))`
-impl ModScreen for compat::ScreenAdapter<PopupControllerScreen> {
+/// `PopupControllerScreen` in the game's screen stack.
+pub struct PopupControllerScreenAdapter {
+    screen: compat::RenderThread<PopupControllerScreen>,
+}
+
+impl PopupControllerScreenAdapter {
+    /// The popup screen (`minecraft.screen instanceof PopupControllerScreen p` binds this).
+    pub fn popup_screen(&self) -> &PopupControllerScreen {
+        self.screen.get()
+    }
+}
+
+impl ModScreen for PopupControllerScreenAdapter {
     fn get_title(&self) -> String {
-        self.title()
+        self.popup_screen().controller_popup.popup_title().get_string()
     }
 
-    /// java: @Override protected void init()
-    fn init(&mut self, screen: &mut mcrust::net::minecraft::client::gui::screens::screen::Screen) {
-        self.lend(screen, |__h| PopupControllerScreen::init(__h))
+    fn init(&mut self, screen: &mut Screen) {
+        screen.add_renderable_widget(compat::cursor_sink_widget());
+        self.popup_screen().init();
     }
 
-    /// java: @Override protected void repositionElements()
-    fn reposition_elements(&mut self, screen: &mut mcrust::net::minecraft::client::gui::screens::screen::Screen) {
-        self.lend(screen, |__h| PopupControllerScreen::reposition_elements(__h))
+    fn reposition_elements(&mut self, screen: &mut Screen) {
+        screen.clear_widgets();
+        screen.add_renderable_widget(compat::cursor_sink_widget());
+        self.popup_screen().reposition_elements();
     }
 
-    /// java: @Override public void tick()
-    fn tick(&mut self, screen: &mut mcrust::net::minecraft::client::gui::screens::screen::Screen) {
-        self.lend(screen, |__h| PopupControllerScreen::tick(__h))
+    fn tick(&mut self, _screen: &mut Screen) {
+        self.popup_screen().tick();
     }
 
-    /// java: @Override public void extractRenderState(@NonNull GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    fn extract_render_state(&mut self, screen: &mcrust::net::minecraft::client::gui::screens::screen::Screen, context: &mut ScreenRenderContext<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
-        self.lend_ref(screen, |__h| PopupControllerScreen::extract_render_state(__h, &context.graphics, mouse_x, mouse_y, a))
+    /// The game's `Screen` background is drawn; then the YACL screen's tab background, the YACL screen, the popup, and
+    /// the frame's tooltip. `mouseMoved` has no event of its own for a mod screen: a frame whose cursor moved delivers
+    /// it first (`MouseHandler.onMove` -> `screen.mouseMoved`).
+    fn extract_render_state(&mut self, _screen: &Screen, context: &mut ScreenRenderContext<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+        let popup_screen = self.popup_screen();
+        if popup_screen.last_mouse.get() != Some((mouse_x, mouse_y)) {
+            popup_screen.last_mouse.set(Some((mouse_x, mouse_y)));
+            popup_screen.mouse_moved(mouse_x as f64, mouse_y as f64);
+        }
+        let graphics = Graphics::new(context.gl, &*context.minecraft);
+        popup_screen.extract_background(&graphics, mouse_x, mouse_y, a);
+        popup_screen.extract_render_state(&graphics, mouse_x, mouse_y, a);
+        graphics.extract_deferred_tooltip();
     }
 
-    /// java: @Override public boolean keyPressed(@NonNull KeyEvent keyEvent)
-    fn key_pressed(&mut self, screen: &mut mcrust::net::minecraft::client::gui::screens::screen::Screen, event: &mcrust::net::minecraft::client::input::key_event::KeyEvent) -> bool {
-        self.lend(screen, |__h| PopupControllerScreen::key_pressed(__h, event))
+    fn key_pressed(&mut self, _screen: &mut Screen, event: &KeyEvent) -> bool {
+        self.popup_screen().key_pressed(event)
     }
 
-    /// java: @Override public boolean charTyped(@NonNull CharacterEvent characterEvent)
-    fn char_typed(&mut self, screen: &mut mcrust::net::minecraft::client::gui::screens::screen::Screen, c: char) -> bool {
-        self.lend(screen, |__h| PopupControllerScreen::char_typed(__h, &CharacterEvent::new(c as i32)))
+    fn char_typed(&mut self, _screen: &mut Screen, c: char) -> bool {
+        self.popup_screen().char_typed(&CharacterEvent::new(c as i32))
     }
 
-    /// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick)
-    fn mouse_clicked(&mut self, screen: &mut mcrust::net::minecraft::client::gui::screens::screen::Screen, x: f64, y: f64, button: i32) -> bool {
-        self.lend(screen, |__h| PopupControllerScreen::mouse_clicked(__h, &MouseButtonEvent::new(x, y, MouseButtonInfo::new(button, 0)), false))
+    fn mouse_clicked(&mut self, _screen: &mut Screen, x: f64, y: f64, button: i32) -> bool {
+        self.popup_screen().mouse_clicked(&yacl_screen::mouse_event(x, y, button), false)
     }
 
-    /// java: @Override public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical)
-    fn mouse_scrolled(&mut self, screen: &mut mcrust::net::minecraft::client::gui::screens::screen::Screen, x: f64, y: f64, scroll_x: f64, scroll_y: f64) -> bool {
-        self.lend(screen, |__h| PopupControllerScreen::mouse_scrolled(__h, x, y, scroll_x, scroll_y))
+    fn mouse_released(&mut self, _screen: &mut Screen, x: f64, y: f64, button: i32) -> bool {
+        self.popup_screen().mouse_released(&yacl_screen::mouse_event(x, y, button))
     }
 
-    /// java: @Override public void onClose()
+    fn mouse_dragged(&mut self, _screen: &mut Screen, x: f64, y: f64, button: i32, dx: f64, dy: f64) -> bool {
+        self.popup_screen().mouse_dragged(&yacl_screen::mouse_event(x, y, button), dx, dy)
+    }
+
+    fn mouse_scrolled(&mut self, _screen: &mut Screen, x: f64, y: f64, scroll_x: f64, scroll_y: f64) -> bool {
+        self.popup_screen().mouse_scrolled(x, y, scroll_x, scroll_y)
+    }
+
+    /// `keyPressed` hands every key to the popup (Escape included), so the game's polled Escape must not close it
+    fn should_close_on_esc(&self) -> bool {
+        false
+    }
+
     fn on_close(&mut self) {
-        self.call(|__h| PopupControllerScreen::on_close(__h))
+        self.popup_screen().on_close();
     }
 
+    fn class_name(&self) -> &'static str {
+        "dev.isxander.yacl3.gui.controllers.PopupControllerScreen"
+    }
 }
-
-// NOTE(fabric2seer): charTyped, extractBackground, extractRenderState, init, keyPressed, mouseClicked, mouseMoved, mouseScrolled, onClose, repositionElements, tick override(s) of Screen - the port dispatches its own calls, so these run only where the mod calls them; hook the port's method to make the game call them

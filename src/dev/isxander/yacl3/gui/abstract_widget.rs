@@ -11,6 +11,7 @@
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::utils::dimension::Dimension;
 use crate::dev::isxander::yacl3::gui::render::color_gradient_render_state::ColorGradientRenderState;
+use crate::dev::isxander::yacl3::gui::render::yacl_gui_element_render_state::YACLGuiElementRenderState as _;
 use crate::dev::isxander::yacl3::gui::utils::gui_utils::GuiUtils;
 use compat::{Graphics, GuiEventListener};
 use mcrust::java::awt::color::Color;
@@ -126,7 +127,7 @@ pub fn draw_rainbow_gradient(graphics: &Graphics<'_>, x1: i32, y1: i32, x2: i32,
     let max_colors = colors.len() as i32 - 1;
     for color in 0..max_colors {
         ColorGradientRenderState::create_horizontal(
-            graphics,
+            &graphics.extractor,
             x1 + (width / max_colors * color),
             y1,
             if color == max_colors - 1 { x2 } else { x1 + (width / max_colors * (color + 1)) },
@@ -134,7 +135,7 @@ pub fn draw_rainbow_gradient(graphics: &Graphics<'_>, x1: i32, y1: i32, x2: i32,
             colors[color as usize],
             colors[color as usize + 1],
         )
-        .submit(graphics);
+        .submit(&graphics.extractor);
     }
 }
 

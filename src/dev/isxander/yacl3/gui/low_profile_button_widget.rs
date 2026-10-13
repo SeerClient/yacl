@@ -1,60 +1,84 @@
-//! Ported from dev.isxander.yacl3.gui.LowProfileButtonWidget by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.LowProfileButtonWidget.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use mcrust::net::minecraft::client::gui::components::abstract_widget::AbstractWidget;
-use mcrust::net::minecraft::client::gui::components::abstract_widget::OnPress;
-use mcrust::net::minecraft::client::gui::components::tooltip::Tooltip;
-use mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor;
+use compat::{Button, Graphics, GuiEventListener};
+use mcrust::net::minecraft::client::input::character_event::CharacterEvent;
+use mcrust::net::minecraft::client::input::key_event::KeyEvent;
+use mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent;
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
 
 /// java: public class LowProfileButtonWidget extends Button.Plain
 pub struct LowProfileButtonWidget {
-    /// java: extends net.minecraft.client.gui.components.Button$Plain
-    pub base: AbstractWidget,
-    /// the object's own shared handle: Java's `this` handed to other objects
-    pub self_ref: compat::WeakShared<Self>,
-}
-
-impl std::ops::Deref for LowProfileButtonWidget {
-    type Target = AbstractWidget;
-    fn deref(&self) -> &Self::Target {
-        &self.base
-    }
-}
-
-impl std::ops::DerefMut for LowProfileButtonWidget {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
-    }
+    /// java: extends Button.Plain
+    pub button: Button,
 }
 
 impl LowProfileButtonWidget {
     /// java: public LowProfileButtonWidget(int x, int y, int width, int height, Component message, OnPress onPress)
-    pub fn new(mut x: i32, mut y: i32, mut width: i32, mut height: i32, mut message: MutableComponent, mut on_press: OnPress) -> compat::Shared<Self> {
-        // TODO(fabric2seer): `new Plain(..)`: the port has no `Plain::new`
-        //   java: super(x, y, width, height, message, onPress, DEFAULT_NARRATION);
-        let __this: compat::Shared<Self> = todo!("constructor");
-        __this
+    pub fn new(x: i32, y: i32, width: i32, height: i32, message: MutableComponent, on_press: impl Fn(&Button) + 'static) -> Self {
+        Self { button: Button::new(x, y, width, height, message, on_press) }
     }
 
-    /// java: public LowProfileButtonWidget(int x, int y, int width, int height, Component message, OnPress onPress, Tooltip tooltip)
-    pub fn new_7(mut x: i32, mut y: i32, mut width: i32, mut height: i32, mut message: MutableComponent, mut on_press: OnPress, mut tooltip: Tooltip) -> compat::Shared<Self> {
-        let __this = Self::new(x, y, width, height, message.clone(), on_press);
-        { let (__q0,) = (tooltip.clone(),); __this.lock().borrow_mut().set_tooltip(__q0) };
-        __this
+    /// java: public LowProfileButtonWidget(int x, int y, int width, int height, Component message, OnPress onPress,
+    /// Tooltip tooltip)
+    #[allow(clippy::too_many_arguments)]
+    pub fn new_7(
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        message: MutableComponent,
+        on_press: impl Fn(&Button) + 'static,
+        tooltip: Option<MutableComponent>,
+    ) -> Self {
+        let this = Self::new(x, y, width, height, message, on_press);
+        this.button.fields.set_tooltip(tooltip);
+        this
     }
-
-    /// java: @Override protected void extractContents(@NonNull GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    pub fn extract_contents(__this: &compat::Shared<Self>, graphics: &GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut a: f32) {
-        if __this.lock().borrow().is_hovered_or_focused() && __this.lock().borrow().is_active() {
-            // TODO(fabric2seer): `Plain.extractDefaultSprite` has no Rust method in the port (looked for `extract_default_sprite` in Button and its supertypes)
-            // rust: __this.lock().borrow().extract_default_sprite(graphics);
-        }
-        // TODO(fabric2seer): field `NONE` of a value of unknown type
-        //   java: this.extractDefaultLabel(graphics.textRendererForWidget(this, GuiGraphicsExtractor.HoveredTextEffects.NONE));
-    }
-
 }
 
-// NOTE(fabric2seer): extractContents override(s) of Plain - the port dispatches its own calls, so these run only where the mod calls them; hook the port's method to make the game call them
+impl GuiEventListener for LowProfileButtonWidget {
+    /// `AbstractWidget.extractRenderState` -> `AbstractButton.extractWidgetRenderState` with this class's
+    /// `extractContents`.
+    fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, _a: f32) {
+        let f = &self.button.fields;
+        if !f.visible.get() {
+            return;
+        }
+        f.update_hover(mouse_x, mouse_y);
+
+        // java: @Override protected void extractContents(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
+        if f.is_hovered_or_focused() && f.is_active() {
+            self.button.extract_default_sprite(graphics);
+        }
+        self.button.extract_default_label(graphics);
+
+        self.button.handle_cursor(graphics);
+        f.refresh_tooltip_for_next_render_pass(graphics, mouse_x, mouse_y);
+    }
+    fn mouse_clicked(&self, event: &MouseButtonEvent, double_click: bool) -> bool {
+        self.button.mouse_clicked(event, double_click)
+    }
+    fn mouse_released(&self, event: &MouseButtonEvent) -> bool {
+        self.button.mouse_released(event)
+    }
+    fn mouse_dragged(&self, event: &MouseButtonEvent, dx: f64, dy: f64) -> bool {
+        self.button.mouse_dragged(event, dx, dy)
+    }
+    fn key_pressed(&self, event: &KeyEvent) -> bool {
+        self.button.key_pressed(event)
+    }
+    fn char_typed(&self, event: &CharacterEvent) -> bool {
+        self.button.char_typed(event)
+    }
+    fn is_mouse_over(&self, x: f64, y: f64) -> bool {
+        self.button.is_mouse_over(x, y)
+    }
+    fn set_focused(&self, focused: bool) {
+        self.button.set_focused(focused)
+    }
+    fn is_focused(&self) -> bool {
+        self.button.is_focused()
+    }
+}

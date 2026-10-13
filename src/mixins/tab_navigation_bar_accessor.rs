@@ -1,22 +1,28 @@
-//! Ported from the Fabric mixin dev.isxander.yacl3.mixin.TabNavigationBarAccessor by fabric2seer.
+//! Ported from the Fabric mixin dev.isxander.yacl3.mixin.TabNavigationBarAccessor (the 26.2 branch).
 //! @Mixin(net.minecraft.client.gui.components.tabs.TabNavigationBar)
+//!
+//! `yacl$getTabManager()`, `yacl$getTabs()`, `yacl$getTabButtons()` - the bar's private fields, read by
+//! `ScrollableNavigationBar`. The YACL bar's base is `compat::TabNavigationBar` (PATTERNS_Y2.md P3), whose fields are
+//! readable; these are the accessors over it.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
+use compat::{MenuTabButton, Tab, TabManager, TabNavigationBar};
 
-/// @Accessor yacl$getTabManager -> net.minecraft.client.gui.components.tabs.TabNavigationBar.tabManager
-// TODO(fabric2seer): `TabManager` - return `&obj.tab_manager` with its Rust type
-// pub fn yacl_get_tab_manager(obj: &mcrust::net::minecraft::client::gui::components::tabs::tab_navigation_bar::TabNavigationBar) -> &T { &obj.tab_manager }
-
-/// @Accessor yacl$getTabs -> net.minecraft.client.gui.components.tabs.TabNavigationBar.tabs
-// TODO(fabric2seer): `ImmutableList<Tab>` - return `&obj.tabs` with its Rust type
-// pub fn yacl_get_tabs(obj: &mcrust::net::minecraft::client::gui::components::tabs::tab_navigation_bar::TabNavigationBar) -> &T { &obj.tabs }
-
-/// @Accessor yacl$getTabButtons -> net.minecraft.client.gui.components.tabs.TabNavigationBar.tabButtons
-// TODO(fabric2seer): `ImmutableList<TabButton>` - return `&obj.tab_buttons` with its Rust type
-// pub fn yacl_get_tab_buttons(obj: &mcrust::net::minecraft::client::gui::components::tabs::tab_navigation_bar::TabNavigationBar) -> &T { &obj.tab_buttons }
-
-/// Mixins apply before the game runs: the `preLaunch` entrypoint calls this.
-pub fn register() {
-    // (nothing to register)
+/// @Accessor("tabManager") TabManager yacl$getTabManager();
+pub fn yacl_get_tab_manager(obj: &TabNavigationBar) -> Rc<TabManager> {
+    obj.tab_manager()
 }
+
+/// @Accessor("tabs") ImmutableList<Tab> yacl$getTabs();
+pub fn yacl_get_tabs(obj: &TabNavigationBar) -> &[Arc<dyn Tab>] {
+    obj.get_tabs()
+}
+
+/// @Accessor("tabButtons") ImmutableList<TabButton> yacl$getTabButtons();
+pub fn yacl_get_tab_buttons(obj: &TabNavigationBar) -> &[Arc<MenuTabButton>] {
+    &obj.tab_buttons
+}
+
+/// Mixins apply before the game runs: the `preLaunch` entrypoint calls this. (An accessor registers nothing.)
+pub fn register() {}

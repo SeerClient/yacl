@@ -1,293 +1,264 @@
-//! Ported from dev.isxander.yacl3.gui.controllers.LabelController by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.controllers.LabelController.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::controller::Controller;
+use crate::dev::isxander::yacl3::api::option::Option as YOption;
 use crate::dev::isxander::yacl3::api::utils::dimension::Dimension;
-use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget;
-use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidgetBase;
-use crate::dev::isxander::yacl3::gui::utils::gui_utils::GuiUtils;
+use crate::dev::isxander::yacl3::gui::abstract_widget::{AbstractWidget, AbstractWidgetBase};
+use crate::dev::isxander::yacl3::gui::controllers::controller_widget::multi_line_label;
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
-use mcrust::com::mojang::blaze3d::platform::cursor::cursor_types::CursorTypes;
-use mcrust::net::minecraft::client::gui::active_text_collector::ActiveTextCollector;
-use mcrust::net::minecraft::client::gui::component_path::ComponentPath;
+use compat::{CursorKind, Graphics, GuiEventListener};
 use mcrust::net::minecraft::client::gui::components::multi_line_label::MultiLineLabel;
-use mcrust::net::minecraft::client::gui::gui_graphics_extractor;
-use mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor;
+use mcrust::net::minecraft::client::gui::font::LINE_HEIGHT;
+use mcrust::net::minecraft::client::gui::narration::narratable_entry::NarrationPriority;
 use mcrust::net::minecraft::client::gui::narration::narrated_element_type::NarratedElementType;
 use mcrust::net::minecraft::client::gui::narration::narration_element_output::NarrationElementOutput;
-use mcrust::net::minecraft::client::gui::navigation::focus_navigation_event::FocusNavigationEvent;
 use mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent;
+use mcrust::net::minecraft::network::chat::component::Component as _;
+use mcrust::net::minecraft::network::chat::formatted_text::FormattedText;
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
 use mcrust::net::minecraft::network::chat::style::Style;
-use mcrust::net::minecraft::util::formatted_char_sequence::FormattedCharSequence;
-use mcrust::net::minecraft::util::formatted_char_sequence::Seq;
-use crate::dev::isxander::yacl3::api::option::Option as _;
+use std::cell::{Cell, RefCell};
+use std::sync::Weak;
 
 /// java: public record LabelController(Option<Component> option) implements Controller<Component>
-#[derive(Clone, Debug)]
+///
+/// Simply renders some text as a label.
 pub struct LabelController {
     /// java: Option<Component> option
-    pub option: compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<MutableComponent>>,
+    pub option: Arc<dyn YOption<MutableComponent>>,
 }
 
 impl LabelController {
-    /// java: the canonical record constructor
-    pub fn new(mut option: compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<MutableComponent>>) -> Self {
+    /// java: public LabelController (the canonical record constructor) - constructs a label controller
+    pub fn new(option: Arc<dyn YOption<MutableComponent>>) -> Self {
         Self { option }
     }
-
 }
 
-impl Controller<mcrust::net::minecraft::network::chat::mutable_component::MutableComponent> for LabelController {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
+impl Controller<MutableComponent> for LabelController {
     /// java: @Override public Option<Component> option()
-    fn option(&self) -> compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<MutableComponent>> {
-        return self.option.clone();
+    fn option(&self) -> Arc<dyn YOption<MutableComponent>> {
+        self.option.clone()
     }
 
     /// java: @Override public Component formatValue()
     fn format_value(&self) -> MutableComponent {
-        return self.option().lock().borrow().pending_value();
+        self.option.pending_value()
     }
 
     /// java: @Override public AbstractWidget provideWidget(YACLScreen screen, Dimension<Integer> widgetDimension)
-    fn provide_widget(&self, screen: &compat::Shared<YACLScreen>, widget_dimension: &compat::Shared<dyn Dimension<i32>>) -> compat::Shared<dyn AbstractWidget> {
-        return (LabelControllerElement::new(screen.clone(), widget_dimension.clone()) as compat::Shared<dyn AbstractWidget>);
+    fn provide_widget(self: Arc<Self>, screen: &Arc<YACLScreen>, widget_dimension: Arc<dyn Dimension<i32>>) -> Arc<dyn AbstractWidget> {
+        Arc::new(LabelControllerElement::new(self, screen, widget_dimension))
     }
-
 }
 
-/// java: public class LabelControllerElement extends AbstractWidget
+/// java: public class LabelControllerElement extends AbstractWidget (an inner class: `control` is its
+/// `LabelController.this`)
 pub struct LabelControllerElement {
     /// java: extends AbstractWidget
     pub base: AbstractWidgetBase,
+    /// `LabelController.this`
+    control: Arc<LabelController>,
     /// java: private List<FormattedCharSequence> wrappedText;
-    pub wrapped_text: Vec<Seq>,
-    /// java: protected MultiLineLabel wrappedTooltip;
-    pub wrapped_tooltip: Option<MultiLineLabel>,
+    wrapped_text: RefCell<Vec<FormattedText>>,
+    /// java: protected MultiLineLabel wrappedTooltip; (shared with the option listener that rebuilds it)
+    pub wrapped_tooltip: Rc<RefCell<MultiLineLabel>>,
     /// java: protected boolean focused;
-    pub focused: bool,
-    /// java: protected final YACLScreen screen;
-    pub screen: compat::Shared<YACLScreen>,
-    /// the object's own shared handle: Java's `this` handed to other objects
-    pub self_ref: compat::WeakShared<Self>,
-}
-
-impl std::ops::Deref for LabelControllerElement {
-    type Target = AbstractWidgetBase;
-    fn deref(&self) -> &Self::Target {
-        &self.base
-    }
-}
-
-impl std::ops::DerefMut for LabelControllerElement {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
-    }
+    pub focused: Cell<bool>,
+    /// java: protected final YACLScreen screen; (held weakly: the screen holds its widgets)
+    pub screen: Weak<YACLScreen>,
 }
 
 impl LabelControllerElement {
     /// java: public LabelControllerElement(YACLScreen screen, Dimension<Integer> dim)
-    pub fn new(mut screen: compat::Shared<YACLScreen>, mut dim: compat::Shared<dyn Dimension<i32>>) -> compat::Shared<Self> {
-        let __init_screen = screen.clone();
-        let (_, __this) = AbstractWidgetBase::new_in(dim.clone(), move |__base| {
-            let __h = compat::shared(Self {
-                base: __base,
-                self_ref: std::sync::Weak::new(),
-                wrapped_text: Default::default(),
-                wrapped_tooltip: None,
-                focused: false,
-                screen: __init_screen,
-            });
-            compat::write(&__h, |__t| __t.self_ref = std::sync::Arc::downgrade(&__h));
-            ((__h.clone() as compat::Shared<dyn AbstractWidget>), __h)
-        });
-        // TODO(fabric2seer): `option(..)` is a method of the enclosing instance (LabelController.this) - an inner class has no outer reference in Rust
-        //   java: option().addListener((opt, pending) -> updateTooltip());
-        LabelControllerElement::update_tooltip(&__this);
-        LabelControllerElement::update_text(&__this);
-        __this
-    }
-
-    /// java: @Override public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    pub fn extract_render_state(__this: &compat::Shared<Self>, graphics: &mut GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut a: f32) {
-        LabelControllerElement::update_text(__this);
-        let mut y: i32 = (({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).y();
-        // TODO(fabric2seer): field `TOOLTIP_AND_CURSOR` of a value of unknown type
-        //   java: ActiveTextCollector textCollector = graphics.textRenderer(GuiGraphicsExtractor.HoveredTextEffects.TOOLTIP_AND_CURSOR);
-        let mut text_collector: Box<dyn ActiveTextCollector> = todo!("fabric2seer: the initialiser of `textCollector` (TODO above)");
-        // TODO(fabric2seer): `option(..)` is a method of the enclosing instance (LabelController.this) - an inner class has no outer reference in Rust
-        //   java: Style textStyle = Style.EMPTY.withColor(option().available() ? -1 : 0xFFA0A0A0);
-        let mut text_style: Style = todo!("fabric2seer: the initialiser of `textStyle` (TODO above)");
-        for text in compat::read(__this, |__t| __t.wrapped_text.clone()) {
-            // TODO(fabric2seer): the port's `accept` ports this Java method with other parameters (left, y, text, advance for Java's x, y, text)
-            // TODO(fabric2seer): `accept` takes 4 argument(s) in the port (`left: i32, y: i32, text: &crate::net::minecraft::network::chat::formatted_text::FormattedText, advance: &dyn Fn(char, &Style) -> f32`), Java passes 3
-            // rust: text_collector.accept(((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x()).wrapping_add(LabelControllerElement::get_x_padding(__this)), y.wrapping_add(LabelControllerElement::get_y_padding(__this)), &GuiUtils::override_style(&text, &text_style));
-            y = y.wrapping_add(mcrust::net::minecraft::client::gui::font::LINE_HEIGHT);
-        }
-        if LabelControllerElement::is_focused(__this) {
-            graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x()).wrapping_sub(1), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).y()).wrapping_sub(1), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x_limit()).wrapping_add(1), (({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).y(), -1);
-            graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x()).wrapping_sub(1), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).y()).wrapping_sub(1), (({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x(), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).y_limit()).wrapping_add(1), -1);
-            graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x()).wrapping_sub(1), (({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).y_limit(), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x_limit()).wrapping_add(1), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).y_limit()).wrapping_add(1), -1);
-            graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), (({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x_limit(), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).y()).wrapping_sub(1), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x_limit()).wrapping_add(1), ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).y_limit()).wrapping_add(1), -1);
-        }
-        let __pose_1 = gui_graphics_extractor::push_pose();
-        if { let __f = compat::dispatch(__this, |__t| __t.is_mouse_over()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>), (mouse_x) as f64, (mouse_y) as f64) } {
-            let mut style: Option<Style> = LabelControllerElement::get_style(__this, mouse_x, mouse_y);
-            if style.is_some() && style.as_ref().unwrap().get_click_event().is_some() {
-                // TODO(fabric2seer): static `CursorTypes.POINTING_HAND` has no Rust counterpart in the port's CursorTypes file
-                // TODO(fabric2seer): `GuiGraphicsExtractor.requestCursor` has no Rust method in the port (looked for `request_cursor` in GuiGraphicsExtractor and its supertypes)
-                // rust: graphics.request_cursor(&CursorTypes::POINTING_HAND);
+    pub fn new(control: Arc<LabelController>, screen: &Arc<YACLScreen>, dim: Arc<dyn Dimension<i32>>) -> Self {
+        let wrapped_tooltip = Rc::new(RefCell::new(MultiLineLabel::empty()));
+        // java: option().addListener((opt, pending) -> updateTooltip());
+        let tooltip_cell = Rc::downgrade(&wrapped_tooltip);
+        let tooltip_screen = Arc::downgrade(screen);
+        control.option.add_listener(Arc::new(move |opt: &dyn YOption<MutableComponent>, _pending: MutableComponent| {
+            if let (Some(cell), Some(screen)) = (tooltip_cell.upgrade(), tooltip_screen.upgrade()) {
+                *cell.borrow_mut() = multi_line_label(&opt.tooltip(), screen.width() / 3 * 2 - 10);
             }
-        }
-        gui_graphics_extractor::pop_pose(__pose_1);
+        }));
+        let element = LabelControllerElement {
+            base: AbstractWidgetBase::new(dim),
+            control,
+            wrapped_text: RefCell::new(Vec::new()),
+            wrapped_tooltip,
+            focused: Cell::new(false),
+            screen: Arc::downgrade(screen),
+        };
+        element.update_tooltip();
+        element.update_text();
+        element
     }
 
-    /// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick)
-    pub fn mouse_clicked(__this: &compat::Shared<Self>, event: &MouseButtonEvent, mut double_click: bool) -> bool {
-        if !({ let __f = compat::dispatch(__this, |__t| __t.is_mouse_over()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>), event.x(), event.y()) }) {
-            return false;
-        }
-        let Some(mut style) = LabelControllerElement::get_style(__this, ((event.x()) as i32), ((event.y()) as i32)) else {
-            return false;
-        };
-        return false;
+    /// `option()` - the outer controller's
+    fn option(&self) -> Arc<dyn YOption<MutableComponent>> {
+        self.control.option()
+    }
+
+    /// `formatValue()` - the outer controller's
+    fn format_value(&self) -> MutableComponent {
+        self.control.format_value()
     }
 
     /// java: @Nullable protected Style getStyle(int mouseX, int mouseY)
-    pub fn get_style(__this: &compat::Shared<Self>, mut mouse_x: i32, mut mouse_y: i32) -> Option<Style> {
-        if !((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).is_point_inside(&mouse_x, &mouse_y)) {
+    pub fn get_style(&self, mouse_x: i32, mouse_y: i32) -> Option<Style> {
+        let dim = self.base.get_dimension();
+        if !dim.is_point_inside(mouse_x, mouse_y) {
             return None;
         }
-        let mut x: i32 = (mouse_x.wrapping_sub((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x())).wrapping_sub(LabelControllerElement::get_x_padding(__this));
-        let mut y: i32 = (mouse_y.wrapping_sub((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).y())).wrapping_sub(LabelControllerElement::get_y_padding(__this));
-        let mut line: i32 = y.wrapping_div(mcrust::net::minecraft::client::gui::font::LINE_HEIGHT);
-        if x < 0 || x > (({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x_limit() {
+
+        let x = mouse_x - dim.x() - self.get_x_padding();
+        let y = mouse_y - dim.y() - self.get_y_padding();
+        let line = y / LINE_HEIGHT;
+
+        if x < 0 || x > dim.x_limit() {
             return None;
         }
-        if y < 0 || y > (({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).y_limit() {
+        if y < 0 || y > dim.y_limit() {
             return None;
         }
-        if line < 0 || line >= (__this.lock().borrow().wrapped_text.len() as i32) {
+        if line < 0 || line >= self.wrapped_text.borrow().len() as i32 {
             return None;
         }
-        return None;
+
+        // TODO reimplement (YACL's own TODO: the style lookup is not implemented upstream)
+        None
     }
 
     /// java: private int getXPadding()
-    pub fn get_x_padding(__this: &compat::Shared<Self>) -> i32 {
-        return 4;
+    fn get_x_padding(&self) -> i32 {
+        4
     }
 
     /// java: private int getYPadding()
-    pub fn get_y_padding(__this: &compat::Shared<Self>) -> i32 {
-        return 3;
+    fn get_y_padding(&self) -> i32 {
+        3
     }
 
     /// java: private void updateText()
-    pub fn update_text(__this: &compat::Shared<Self>) {
-        // TODO(fabric2seer): `formatValue(..)` is a method of the enclosing instance (LabelController.this) - an inner class has no outer reference in Rust
-        //   java: wrappedText = textRenderer.split(formatValue(), getDimension().width() - getXPadding() * 2);
-        ({ let __f = compat::dispatch(__this, |__t| __t.set_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>), { let (__a0,) = (&((__this.lock().borrow().wrapped_text.len() as i32).wrapping_mul(mcrust::net::minecraft::client::gui::font::LINE_HEIGHT)).wrapping_add((LabelControllerElement::get_y_padding(__this)).wrapping_mul(2)),); (({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).with_height(__a0) }) });
+    fn update_text(&self) {
+        let font = compat::font();
+        let dim = self.base.get_dimension();
+        let wrapped = font.split(&FormattedText::from(self.format_value()), dim.width() - self.get_x_padding() * 2);
+        let height = wrapped.len() as i32 * LINE_HEIGHT + self.get_y_padding() * 2;
+        *self.wrapped_text.borrow_mut() = wrapped;
+        AbstractWidget::set_dimension(self, dim.with_height(height));
     }
 
     /// java: private void updateTooltip()
-    pub fn update_tooltip(__this: &compat::Shared<Self>) {
-        // TODO(fabric2seer): `option(..)` is a method of the enclosing instance (LabelController.this) - an inner class has no outer reference in Rust
-        //   java: this.wrappedTooltip = MultiLineLabel.create(textRenderer, option().tooltip(), screen.width / 3 * 2 - 10);
+    fn update_tooltip(&self) {
+        let width = self.screen.upgrade().map(|screen| screen.width()).unwrap_or(0);
+        *self.wrapped_tooltip.borrow_mut() = multi_line_label(&self.option().tooltip(), width / 3 * 2 - 10);
     }
+}
 
-    /// java: @Nullable @Override public ComponentPath nextFocusPath(FocusNavigationEvent focusNavigationEvent)
-    pub fn next_focus_path(__this: &compat::Shared<Self>, focus_navigation_event: &FocusNavigationEvent) -> Option<ComponentPath> {
-        // TODO(fabric2seer): the condition: `option(..)` is a method of the enclosing instance (LabelController.this) - an inner class has no outer reference in Rust
-        //   java: !option().available()
-        if todo!("fabric2seer: the condition (TODO above)") {
-            return None;
+impl GuiEventListener for LabelControllerElement {
+    /// java: @Override public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
+    fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, _a: f32) {
+        self.update_text();
+
+        let dim = self.base.get_dimension();
+        let mut y = dim.y();
+        // graphics.textRenderer(HoveredTextEffects.TOOLTIP_AND_CURSOR): white, drop shadow; every char of a line
+        // carries `textStyle` (GuiUtils.overrideStyle), so the line is its string in that style.
+        let text_style = Style::EMPTY.with_color(if self.option().available() { -1 } else { 0xFFA0A0A0u32 as i32 });
+        for text in self.wrapped_text.borrow().iter() {
+            let styled = FormattedText::Styled(text.get_string(), text_style.clone());
+            graphics.text(&styled, dim.x() + self.get_x_padding(), y + self.get_y_padding(), -1, true);
+            y += LINE_HEIGHT;
         }
-        // TODO(fabric2seer): static `ComponentPath.leaf` has no Rust counterpart in the port
-        // rust: return (if !(LabelControllerElement::is_focused(__this)) { Some(ComponentPath::leaf(__this.clone())) } else { None });
-        return todo!("fabric2seer: see the TODO above");
+
+        if self.is_focused() {
+            graphics.fill(dim.x() - 1, dim.y() - 1, dim.x_limit() + 1, dim.y(), -1);
+            graphics.fill(dim.x() - 1, dim.y() - 1, dim.x(), dim.y_limit() + 1, -1);
+            graphics.fill(dim.x() - 1, dim.y_limit(), dim.x_limit() + 1, dim.y_limit() + 1, -1);
+            graphics.fill(dim.x_limit(), dim.y() - 1, dim.x_limit() + 1, dim.y_limit() + 1, -1);
+        }
+
+        graphics.push_pose();
+        if self.is_mouse_over(mouse_x as f64, mouse_y as f64) {
+            let style = self.get_style(mouse_x, mouse_y);
+
+            if style.is_some_and(|style| style.get_click_event().is_some()) {
+                graphics.request_cursor(CursorKind::PointingHand);
+            }
+        }
+        graphics.pop_pose();
     }
 
-    /// java: @Override public boolean isFocused()
-    pub fn is_focused(__this: &compat::Shared<Self>) -> bool {
-        return compat::read(__this, |__t| __t.focused);
+    /// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick)
+    fn mouse_clicked(&self, event: &MouseButtonEvent, _double_click: bool) -> bool {
+        if !self.is_mouse_over(event.x(), event.y()) {
+            return false;
+        }
+
+        let style = self.get_style(event.x() as i32, event.y() as i32);
+
+        if style.is_none() {
+            return false;
+        }
+
+        // TODO: reimplement (YACL's own TODO)
+        false
+    }
+
+    /// java: AbstractWidget.isMouseOver(double mouseX, double mouseY)
+    fn is_mouse_over(&self, mouse_x: f64, mouse_y: f64) -> bool {
+        self.base.is_mouse_over(mouse_x, mouse_y)
     }
 
     /// java: @Override public void setFocused(boolean focused)
-    pub fn set_focused(__this: &compat::Shared<Self>, mut focused: bool) {
-        { let __v = focused; compat::write(__this, |__t| __t.focused = __v); }
+    fn set_focused(&self, focused: bool) {
+        self.focused.set(focused);
     }
 
+    /// java: @Override public boolean isFocused()
+    fn is_focused(&self) -> bool {
+        self.focused.get()
+    }
 }
 
 impl AbstractWidget for LabelControllerElement {
-    fn abstract_widget_base(&self) -> &AbstractWidgetBase {
-        &self.base
-    }
-    fn abstract_widget_base_mut(&mut self) -> &mut AbstractWidgetBase {
-        &mut self.base
+    fn set_dimension(&self, dim: Arc<dyn Dimension<i32>>) {
+        self.base.set_dimension(dim);
     }
 
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+    fn get_dimension(&self) -> Arc<dyn Dimension<i32>> {
+        self.base.get_dimension()
     }
 
-    /// java: @Override public boolean matchesSearch(String query) (dispatch: the body for this class)
-    fn matches_search(&self) -> fn(&compat::Shared<dyn AbstractWidget>, &str) -> bool {
-        LabelControllerElement::matches_search_dyn
+    /// java: @Override public boolean matchesSearch(String query)
+    fn matches_search(&self, query: &str) -> bool {
+        self.format_value().get_string().to_lowercase().contains(&query.to_lowercase())
     }
 
-    /// java: @Override public void updateNarration(NarrationElementOutput builder) (dispatch: the body for this class)
-    fn update_narration(&self) -> fn(&compat::Shared<dyn AbstractWidget>, &mut dyn NarrationElementOutput) {
-        LabelControllerElement::update_narration_dyn
+    /// java: @Override public void updateNarration(NarrationElementOutput builder)
+    fn update_narration(&self, builder: &mut dyn NarrationElementOutput) {
+        builder.add_component(NarratedElementType::Title, FormattedText::from(self.format_value()));
     }
 
-    /// java: @Override public NarrationPriority narrationPriority() (dispatch: the body for this class)
-    fn narration_priority(&self) -> fn(&compat::Shared<dyn AbstractWidget>) -> crate::unresolved::NarrationPriority {
-        LabelControllerElement::narration_priority_dyn
+    /// java: @Override public NarrationPriority narrationPriority()
+    fn narration_priority(&self) -> NarrationPriority {
+        NarrationPriority::Focused
     }
 
 }
 
 impl LabelControllerElement {
-    /// java: @Override public boolean matchesSearch(String query)
-    pub fn matches_search_impl(__this: &compat::Shared<Self>, query: &str) -> bool {
-        // TODO(fabric2seer): `formatValue(..)` is a method of the enclosing instance (LabelController.this) - an inner class has no outer reference in Rust
-        //   java: return formatValue().getString().toLowerCase().contains(query.toLowerCase());
-        todo!("fabric2seer: the value of this function is in a TODO above")
+    /// java: @Nullable @Override public ComponentPath nextFocusPath(FocusNavigationEvent focusNavigationEvent) -
+    /// `ComponentPath.leaf(this)` when this answers `true`, `null` otherwise.
+    ///
+    /// rust: port gap (GAPS_Y2.md G7) - the YACL screen has no keyboard focus navigation to ask it yet.
+    pub fn next_focus_path_is_leaf(&self) -> bool {
+        if !self.option().available() {
+            return false;
+        }
+        !self.is_focused()
     }
-
-    /// LabelControllerElement.matchesSearch as the dispatch of AbstractWidget.matchesSearch
-    pub fn matches_search_dyn(__this: &compat::Shared<dyn AbstractWidget>, __p0: &str) -> bool {
-        Self::matches_search_impl(&compat::view_as::<Self, _, Self>(__this, |a| a), __p0)
-    }
-
-    /// java: @Override public void updateNarration(NarrationElementOutput builder)
-    pub fn update_narration_impl(__this: &compat::Shared<Self>, builder: &mut dyn NarrationElementOutput) {
-        // TODO(fabric2seer): `formatValue(..)` is a method of the enclosing instance (LabelController.this) - an inner class has no outer reference in Rust
-        //   java: builder.add(NarratedElementType.TITLE, formatValue());
-    }
-
-    /// LabelControllerElement.updateNarration as the dispatch of AbstractWidget.updateNarration
-    pub fn update_narration_dyn(__this: &compat::Shared<dyn AbstractWidget>, __p0: &mut dyn NarrationElementOutput) {
-        Self::update_narration_impl(&compat::view_as::<Self, _, Self>(__this, |a| a), __p0)
-    }
-
-    /// java: @Override public NarrationPriority narrationPriority()
-    pub fn narration_priority_impl(__this: &compat::Shared<Self>) -> crate::unresolved::NarrationPriority {
-        // TODO(fabric2seer): static field NarrationPriority.FOCUSED
-        //   java: return NarrationPriority.FOCUSED;
-        todo!("fabric2seer: the value of this function is in a TODO above")
-    }
-
-    /// LabelControllerElement.narrationPriority as the dispatch of AbstractWidget.narrationPriority
-    pub fn narration_priority_dyn(__this: &compat::Shared<dyn AbstractWidget>) -> crate::unresolved::NarrationPriority {
-        Self::narration_priority_impl(&compat::view_as::<Self, _, Self>(__this, |a| a))
-    }
-
 }

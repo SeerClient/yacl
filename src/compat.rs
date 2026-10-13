@@ -201,7 +201,26 @@ pub fn offset_by_codepoints(s: &str, cursor: i32, n: i32) -> i32 {
 
 /// `String.isBlank()`: only `Character.isWhitespace` characters.
 pub fn is_blank(s: &str) -> bool {
-    s.chars().all(|c| c.is_whitespace())
+    s.chars().all(java_is_whitespace)
+}
+
+/// `Character.isWhitespace(char)`: a Unicode space separator (Zs / Zl / Zp) that is not a non-breaking space
+/// (U+00A0, U+2007, U+202F), or one of U+0009-U+000D and U+001C-U+001F. Rust's `char::is_whitespace` (Unicode
+/// `White_Space`) differs on both lists, so it is spelled out.
+pub fn java_is_whitespace(c: char) -> bool {
+    matches!(
+        c,
+        '\u{0009}'..='\u{000D}'
+            | '\u{001C}'..='\u{001F}'
+            | ' '
+            | '\u{1680}'
+            | '\u{2000}'..='\u{2006}'
+            | '\u{2008}'..='\u{200A}'
+            | '\u{2028}'
+            | '\u{2029}'
+            | '\u{205F}'
+            | '\u{3000}'
+    )
 }
 
 /// `String.trim()`: strips every char <= ' ' (not Unicode whitespace).
@@ -1891,10 +1910,36 @@ impl<T> ClassOf<T> {
     }
 }
 
-/// `com.google.gson.FieldNamingPolicy` (only `IDENTITY` is what the generated forms write).
+/// `com.google.gson.FieldNamingPolicy` - the two policies YACL configures. The generated per-class forms write the
+/// Java field names (`IDENTITY`); a form that honours the builder's policy names each field through
+/// `translate_name` (GAPS_Y2.md G13: the converter must generate that, for nested objects too).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum FieldNamingPolicy {
+    /// `IDENTITY`
     Identity,
+    /// `LOWER_CASE_WITH_UNDERSCORES` - YACL's default for `GsonConfigSerializer` and `GsonConfigInstance`
+    LowerCaseWithUnderscores,
+}
+
+impl FieldNamingPolicy {
+    /// `translateName(Field f)` over the field's Java name: `LOWER_CASE_WITH_UNDERSCORES` is
+    /// `separateCamelCase(name, '_').toLowerCase(Locale.ENGLISH)` - a `_` before every upper-case letter that is not
+    /// the first character.
+    pub fn translate_name(self, name: &str) -> String {
+        match self {
+            FieldNamingPolicy::Identity => name.to_string(),
+            FieldNamingPolicy::LowerCaseWithUnderscores => {
+                let mut out = String::with_capacity(name.len() + 4);
+                for c in name.chars() {
+                    if c.is_uppercase() && !out.is_empty() {
+                        out.push('_');
+                    }
+                    out.push(c);
+                }
+                out.to_lowercase()
+            }
+        }
+    }
 }
 
 /// `new GsonBuilder()..create()`: the options the generated forms honour (`setPrettyPrinting`; `serializeNulls` and
@@ -1902,6 +1947,8 @@ pub enum FieldNamingPolicy {
 #[derive(Clone, Debug, Default)]
 pub struct GsonBuilder {
     pub pretty: bool,
+    /// `setFieldNamingPolicy(policy)` - `None` is Gson's default, `IDENTITY`
+    pub field_naming_policy: Option<FieldNamingPolicy>,
 }
 
 impl GsonBuilder {
@@ -1915,7 +1962,8 @@ impl GsonBuilder {
     pub fn serialize_nulls(self) -> GsonBuilder {
         self
     }
-    pub fn set_field_naming_policy(self, _policy: FieldNamingPolicy) -> GsonBuilder {
+    pub fn set_field_naming_policy(mut self, policy: FieldNamingPolicy) -> GsonBuilder {
+        self.field_naming_policy = Some(policy);
         self
     }
     pub fn disable_html_escaping(self) -> GsonBuilder {
@@ -1927,14 +1975,22 @@ impl GsonBuilder {
         self
     }
     pub fn create(self) -> Gson {
-        Gson { pretty: self.pretty }
+        Gson { pretty: self.pretty, field_naming_policy: self.field_naming_policy.unwrap_or(FieldNamingPolicy::Identity) }
     }
 }
 
 /// `com.google.gson.Gson` over the generated per-class forms.
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct Gson {
     pub pretty: bool,
+    /// `fieldNamingStrategy()` - what a form that honours it names fields with (`FieldNamingPolicy::translate_name`)
+    pub field_naming_policy: FieldNamingPolicy,
+}
+
+impl Default for Gson {
+    fn default() -> Gson {
+        Gson { pretty: false, field_naming_policy: FieldNamingPolicy::Identity }
+    }
 }
 
 impl Gson {
@@ -2374,7 +2430,10 @@ pub fn lend_list<L: ListHalf, R>(
 /// The mod list object attached to a game widget (`list` the screen holds by reference).
 pub fn list_object<L: ListHalf + 'static>(
     widget: &mcrust::net::minecraft::client::gui::components::abstract_widget::AbstractWidget,
-) -> Option<Shared<L>> {
+) -> Option<Shared<L>>
+where
+    ListClass<L>: mcrust::mcrust::modding::widgets::ModList,
+{
     widget.mod_widget()?.with::<mcrust::mcrust::modding::widgets::ModSelectionList, _>(|l| {
         l.class::<ListClass<L>>().map(|c| c.object().clone())
     }).flatten()
@@ -3491,6 +3550,17 @@ pub struct Graphics<'a> {
     pub mc: &'a mcrust::net::minecraft::client::minecraft::Minecraft,
     pub extractor: mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor,
     poses: std::cell::RefCell<Vec<mcrust::org::joml::matrix3x2f::Matrix3x2f>>,
+    /// `GuiGraphicsExtractor.deferredTooltip` - the first tooltip a widget parked this frame (`setTooltipForNextFrame`),
+    /// drawn over everything by `extract_deferred_tooltip` (`extractDeferredElements`).
+    deferred_tooltip: std::cell::RefCell<Option<DeferredTooltip>>,
+}
+
+/// A tooltip parked for the end of the frame: its lines, where it was asked for, and its positioner.
+pub struct DeferredTooltip {
+    lines: Vec<mcrust::net::minecraft::network::chat::formatted_text::FormattedText>,
+    x: i32,
+    y: i32,
+    positioner: Box<dyn mcrust::net::minecraft::client::gui::screens::inventory::tooltip::client_tooltip_positioner::ClientTooltipPositioner>,
 }
 
 impl<'a> Graphics<'a> {
@@ -3501,7 +3571,55 @@ impl<'a> Graphics<'a> {
             mc,
             extractor: mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor::new(),
             poses: std::cell::RefCell::new(Vec::new()),
+            deferred_tooltip: std::cell::RefCell::new(None),
         }
+    }
+
+    /// `setTooltipForNextFrame(font, lines, positioner, x, y, false)` - the first tooltip of the frame wins
+    /// (`setTooltipForNextFrameInternal:1202-1206`).
+    pub fn set_tooltip_for_next_frame(
+        &self,
+        lines: Vec<mcrust::net::minecraft::network::chat::formatted_text::FormattedText>,
+        positioner: Box<dyn mcrust::net::minecraft::client::gui::screens::inventory::tooltip::client_tooltip_positioner::ClientTooltipPositioner>,
+        x: i32,
+        y: i32,
+    ) {
+        let mut slot = self.deferred_tooltip.borrow_mut();
+        if !lines.is_empty() && slot.is_none() {
+            *slot = Some(DeferredTooltip { lines, x, y, positioner });
+        }
+    }
+
+    /// `extractDeferredElements` - the parked tooltip, on the next stratum over everything drawn so far
+    /// (`GuiGraphicsExtractor.tooltip:1211-1254`).
+    pub fn extract_deferred_tooltip(&self) {
+        use mcrust::net::minecraft::client::gui::gui_graphics_extractor;
+        use mcrust::net::minecraft::client::gui::screens::inventory::tooltip::client_tooltip_component::TooltipGraphics;
+        let Some(tooltip) = self.deferred_tooltip.borrow_mut().take() else {
+            return;
+        };
+        let components = gui_graphics_extractor::text_components(tooltip.lines);
+        let mut gui_items = Vec::new();
+        let mut tooltip_graphics = TooltipGraphics {
+            gl: self.gl,
+            gfx: self.mc,
+            gui_items: &mut gui_items,
+            resolver: None,
+            level: None,
+            owner: None,
+            cooldowns: None,
+            cooldown_partial_tick: 0.0,
+        };
+        gui_graphics_extractor::next_stratum();
+        gui_graphics_extractor::tooltip(
+            &mut tooltip_graphics,
+            &*self.mc.font,
+            &components,
+            tooltip.x,
+            tooltip.y,
+            &*tooltip.positioner,
+            None,
+        );
     }
 
     /// `graphics.guiWidth()`
@@ -3617,6 +3735,38 @@ impl<'a> Graphics<'a> {
         );
     }
 
+    /// `graphics.blit(RenderPipelines.GUI_TEXTURED, texture, x, y, u, v, width, height, textureWidth, textureHeight, color)`
+    #[allow(clippy::too_many_arguments)]
+    pub fn blit_with_color(
+        &self,
+        texture: &mcrust::net::minecraft::resources::identifier::Identifier,
+        x: i32,
+        y: i32,
+        u: f32,
+        v: f32,
+        width: i32,
+        height: i32,
+        texture_width: i32,
+        texture_height: i32,
+        color: i32,
+    ) {
+        mcrust::net::minecraft::client::gui::gui_graphics_extractor::blit_identifier_with_color(
+            self.gl,
+            self.mc,
+            mcrust::net::minecraft::client::renderer::render_pipelines::gui_textured(),
+            texture,
+            x,
+            y,
+            u,
+            v,
+            width,
+            height,
+            texture_width,
+            texture_height,
+            color,
+        );
+    }
+
     /// `graphics.enableScissor(x0, y0, x1, y1)`
     pub fn enable_scissor(&self, x0: i32, y0: i32, x1: i32, y1: i32) {
         self.extractor.enable_scissor(x0, y0, x1, y1);
@@ -3676,8 +3826,8 @@ impl Drop for Graphics<'_> {
 
 /// Java's `GuiEventListener` + `Renderable` for an object the mod dispatches itself (the YACL screen's buttons, edit box,
 /// list and YACL's own widgets). Every default body is `GuiEventListener.java`'s. Methods take `&self`: the object keeps
-/// its state in cells, so a listener it fires can reach it again.
-pub trait GuiEventListener {
+/// its state in cells, so a listener it fires can reach it again. `DynAny`: `child instanceof SearchFieldWidget`.
+pub trait GuiEventListener: DynAny {
     /// `Renderable.extractRenderState(graphics, mouseX, mouseY, a)`
     fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32);
 
@@ -3746,6 +3896,9 @@ pub trait GuiEventListener {
 pub struct ContainerEventHandler {
     focused: std::cell::RefCell<Option<std::sync::Arc<dyn GuiEventListener>>>,
     dragging: std::cell::Cell<bool>,
+    /// The owner's `setFocused(GuiEventListener)` is a plain field write (a class that implements
+    /// `ContainerEventHandler` itself, like YACL's `ListEntryWidget`) rather than `AbstractContainerEventHandler`'s.
+    plain: bool,
 }
 
 impl ContainerEventHandler {
@@ -3753,13 +3906,28 @@ impl ContainerEventHandler {
         ContainerEventHandler::default()
     }
 
+    /// For an owner whose `setFocused(GuiEventListener)` is `this.focused = focused` (no `setFocused(boolean)` calls on
+    /// the old and new child).
+    pub fn new_plain() -> ContainerEventHandler {
+        ContainerEventHandler { plain: true, ..ContainerEventHandler::default() }
+    }
+
+    /// `this.focused = focused`
+    pub fn set_focused_field(&self, focused: Option<std::sync::Arc<dyn GuiEventListener>>) {
+        *self.focused.borrow_mut() = focused;
+    }
+
     /// `getFocused()`
     pub fn get_focused(&self) -> Option<std::sync::Arc<dyn GuiEventListener>> {
         self.focused.borrow().clone()
     }
 
-    /// `AbstractContainerEventHandler.setFocused(GuiEventListener)`
+    /// `AbstractContainerEventHandler.setFocused(GuiEventListener)` (or the plain field write, `new_plain`)
     pub fn set_focused(&self, focused: Option<std::sync::Arc<dyn GuiEventListener>>) {
+        if self.plain {
+            self.set_focused_field(focused);
+            return;
+        }
         let current = self.focused.borrow().clone();
         let same = match (&current, &focused) {
             (Some(a), Some(b)) => std::sync::Arc::ptr_eq(a, b),
@@ -3804,6 +3972,27 @@ impl ContainerEventHandler {
         };
         if widget.mouse_clicked(event, double_click) && widget.should_take_focus_after_interaction() {
             self.set_focused(Some(widget));
+            if event.button() == 0 {
+                self.set_dragging(true);
+            }
+        }
+        true
+    }
+
+    /// `ContainerEventHandler.mouseClicked:39-55` for an owner that overrides `setFocused(GuiEventListener)`: the
+    /// owner's `set_focused` is called where the default body calls `this.setFocused(widget)`.
+    pub fn mouse_clicked_with(
+        &self,
+        children: &[std::sync::Arc<dyn GuiEventListener>],
+        event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent,
+        double_click: bool,
+        set_focused: &dyn Fn(Option<std::sync::Arc<dyn GuiEventListener>>),
+    ) -> bool {
+        let Some(widget) = ContainerEventHandler::get_child_at(children, event.x(), event.y()) else {
+            return false;
+        };
+        if widget.mouse_clicked(event, double_click) && widget.should_take_focus_after_interaction() {
+            set_focused(Some(widget));
             if event.button() == 0 {
                 self.set_dragging(true);
             }
@@ -3874,6 +4063,8 @@ pub struct WidgetFields {
     pub focused: std::cell::Cell<bool>,
     /// `setTooltip(Tooltip)` - the tooltip's text.
     pub tooltip: std::cell::RefCell<Option<mcrust::net::minecraft::network::chat::mutable_component::MutableComponent>>,
+    /// `AbstractWidget.tooltip` - the holder's delay and display clock.
+    pub tooltip_holder: mcrust::net::minecraft::client::gui::components::widget_tooltip_holder::WidgetTooltipHolder,
 }
 
 impl WidgetFields {
@@ -3891,6 +4082,36 @@ impl WidgetFields {
             is_hovered: std::cell::Cell::new(false),
             focused: std::cell::Cell::new(false),
             tooltip: std::cell::RefCell::new(None),
+            tooltip_holder: mcrust::net::minecraft::client::gui::components::widget_tooltip_holder::WidgetTooltipHolder::new(),
+        }
+    }
+
+    /// `AbstractWidget.extractRenderState:60`'s `this.tooltip.refreshTooltipForNextRenderPass(graphics, mouseX, mouseY,
+    /// isHovered, isFocused, getRectangle())` - `Tooltip.toCharSequence` (the message split at 170) parked with
+    /// `MenuTooltipPositioner` over the widget (the mouse never reaches a keyboard-only positioner here: the YACL
+    /// screen has no keyboard focus navigation, GAPS_Y2.md G7).
+    pub fn refresh_tooltip_for_next_render_pass(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32) {
+        use mcrust::net::minecraft::client::gui::screens::inventory::tooltip::menu_tooltip_positioner::MenuTooltipPositioner;
+        let tooltip = self.tooltip.borrow().clone();
+        let shown = self.tooltip_holder.refresh_with(
+            mcrust::net::minecraft::util::util::get_millis(),
+            tooltip.is_some(),
+            self.is_hovered(),
+            self.focused.get(),
+            false,
+        );
+        if let (true, Some(tooltip)) = (shown, tooltip) {
+            let lines = font().split(
+                &mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(tooltip),
+                mcrust::net::minecraft::client::gui::components::tooltip::MAX_WIDTH,
+            );
+            let rectangle = mcrust::net::minecraft::client::gui::navigation::screen_rectangle::ScreenRectangle::new_at(
+                self.get_x(),
+                self.get_y(),
+                self.get_width(),
+                self.get_height(),
+            );
+            graphics.set_tooltip_for_next_frame(lines, Box::new(MenuTooltipPositioner::new(rectangle)), mouse_x, mouse_y);
         }
     }
 
@@ -4069,6 +4290,52 @@ impl Button {
         self.look.draw(&self.fields, message, graphics, mouse_x, mouse_y);
     }
 
+    /// `AbstractButton.extractDefaultSprite(graphics)` - `SPRITES.get(active, isHoveredOrFocused())` over the box, in
+    /// `ARGB.white(alpha)`. `SPRITES` is `new WidgetSprites(BUTTON, BUTTON_DISABLED, BUTTON_HIGHLIGHTED)`.
+    pub fn extract_default_sprite(&self, graphics: &Graphics<'_>) {
+        use mcrust::net::minecraft::resources::identifier::Identifier;
+        let f = &self.fields;
+        let sprite = match (f.active.get(), f.is_hovered_or_focused()) {
+            (true, true) => "widget/button_highlighted",
+            (true, false) => "widget/button",
+            (false, _) => "widget/button_disabled",
+        };
+        graphics.blit_sprite_with_color(
+            &Identifier::with_default_namespace(sprite),
+            f.get_x(),
+            f.get_y(),
+            f.get_width(),
+            f.get_height(),
+            mcrust::net::minecraft::util::argb::white_f32(f.alpha.get()),
+        );
+    }
+
+    /// `AbstractButton.extractDefaultLabel(graphics.textRendererForWidget(this, NONE))` -
+    /// `extractScrollingStringOverContents(output, getMessage(), 2)`: centred, or scrolling inside the box when it is
+    /// too wide, in `ARGB.white(alpha)` with a drop shadow.
+    pub fn extract_default_label(&self, graphics: &Graphics<'_>) {
+        use mcrust::net::minecraft::client::gui::active_text_collector;
+        let f = &self.fields;
+        let message = mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(f.get_message());
+        let line_width = font().width_of(&message);
+        let placement = active_text_collector::scrolling_string_over_contents(
+            f.get_x(),
+            f.get_y(),
+            f.get_width(),
+            f.get_height(),
+            2,
+            line_width,
+            mcrust::net::minecraft::util::util::get_millis(),
+        );
+        if let Some((left, right, top, bottom)) = placement.scissor {
+            graphics.enable_scissor(left, top, right, bottom);
+        }
+        graphics.text(&message, placement.x, placement.y, mcrust::net::minecraft::util::argb::white_f32(f.alpha.get()), true);
+        if placement.scissor.is_some() {
+            graphics.disable_scissor();
+        }
+    }
+
     /// `AbstractButton.handleCursor`: a pointing hand (not allowed when inactive) while hovered.
     pub fn handle_cursor(&self, graphics: &Graphics<'_>) {
         if self.fields.is_hovered() {
@@ -4087,6 +4354,7 @@ impl GuiEventListener for Button {
         let message = mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(self.fields.get_message());
         self.extract_default(graphics, Some(&message), mouse_x, mouse_y);
         self.handle_cursor(graphics);
+        self.fields.refresh_tooltip_for_next_render_pass(graphics, mouse_x, mouse_y);
     }
 
     /// `AbstractWidget.mouseClicked:109-125` -> `AbstractButton.onClick` -> `onPress`.
@@ -4341,5 +4609,648 @@ impl GuiEventListener for EditBoxWidget {
 
     fn is_focused(&self) -> bool {
         self.focused.get()
+    }
+}
+
+/// A Java object reference held as a VALUE (an `Item` option's value): equal only to the same object (`==`, which is
+/// what `Object.equals` answers for a class that does not override it).
+///
+/// Why not plain `Arc<T>`: `Arc<T>: PartialEq` compares the POINTEES and needs `T: PartialEq`, which `Item` does not
+/// (and must not) implement; Java's `Option<Item>.pendingValue().equals(binding.getValue())` - the "changed" test -
+/// is reference identity, so the wrapper's `PartialEq` is `Arc::ptr_eq`. The registry holds ONE `Arc<Item>` per item
+/// (`ErasedItem`), so two lookups of the same id compare equal exactly as two Java reads of `Items.STONE` do. It is
+/// `Send + Sync` whenever `T` is (an `Item` is: it lives in the static registry), so config statics can hold it.
+pub struct JavaRef<T: ?Sized>(pub std::sync::Arc<T>);
+
+impl<T: ?Sized> JavaRef<T> {
+    pub fn new(value: std::sync::Arc<T>) -> JavaRef<T> {
+        JavaRef(value)
+    }
+}
+
+impl<T: ?Sized> Clone for JavaRef<T> {
+    fn clone(&self) -> JavaRef<T> {
+        JavaRef(self.0.clone())
+    }
+}
+
+impl<T: ?Sized> PartialEq for JavaRef<T> {
+    fn eq(&self, other: &JavaRef<T>) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl<T: ?Sized> Eq for JavaRef<T> {}
+
+impl<T: ?Sized> std::ops::Deref for JavaRef<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T: ?Sized> std::fmt::Debug for JavaRef<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "JavaRef@{:p}", std::sync::Arc::as_ptr(&self.0) as *const ())
+    }
+}
+
+/// `net.minecraft.client.gui.components.tabs.Tab` for a screen that draws its own widgets (the YACL screen): the tab's
+/// widgets are the mod's own (`GuiEventListener`), visited by the screen's `TabManager`.
+pub trait Tab: DynAny {
+    /// `Component getTabTitle()`
+    fn get_tab_title(&self) -> mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
+
+    /// `Component getTabExtraNarration()` - `CommonComponents.EMPTY` by default
+    fn get_tab_extra_narration(&self) -> mcrust::net::minecraft::network::chat::mutable_component::MutableComponent {
+        mcrust::net::minecraft::network::chat::component::empty()
+    }
+
+    /// `void visitChildren(Consumer<AbstractWidget> consumer)`
+    fn visit_children(&self, consumer: &mut dyn FnMut(std::sync::Arc<dyn GuiEventListener>));
+
+    /// `void doLayout(ScreenRectangle screenRectangle)`
+    fn do_layout(&self, screen_rectangle: mcrust::net::minecraft::client::gui::navigation::screen_rectangle::ScreenRectangle);
+
+    /// `tab instanceof TabExt tabExt ? tabExt : null`
+    fn as_tab_ext(&self) -> Option<&dyn crate::dev::isxander::yacl3::gui::tab::tab_ext::TabExt> {
+        None
+    }
+}
+
+/// `NumberFormat.getInstance()` - the default locale's NUMBER pattern `#,##0.###` (grouping by three, at most three
+/// fraction digits, HALF_EVEN) over the port's `DecimalFormat`. The port carries the US / ROOT symbols only, which
+/// are what an English JVM uses (GAPS_Y2.md G9: a JVM in another default locale formats with its own).
+pub fn number_format_instance() -> mcrust::java::text::decimal_format::DecimalFormat {
+    use mcrust::java::text::decimal_format_symbols::{self, Locale};
+    mcrust::java::text::decimal_format::DecimalFormat::new("#,##0.###", decimal_format_symbols::get_instance(Locale::Us))
+}
+
+/// `NumberFormat.getInstance().parse(text, parsePosition)` (`DecimalFormat.parse` -> `subparse` with the default
+/// pattern's prefixes `""` / `"-"`, grouping on, not integer-only, not strict): parses from char index `start` and
+/// answers the number's `doubleValue()` and the index after it, or `None` (the `ParsePosition` index unchanged) when
+/// no number starts there. `NaN`, the infinity sign, the grouping separator inside the integer part and an `E`
+/// exponent are recognised as `DecimalFormat` does.
+pub fn number_format_parse(text: &str, start: usize) -> (Option<f64>, usize) {
+    let chars: Vec<char> = text.chars().collect();
+    let symbols = mcrust::java::text::decimal_format_symbols::get_instance(mcrust::java::text::decimal_format_symbols::Locale::Us);
+    let region = |at: usize, s: &str| -> bool {
+        let pat: Vec<char> = s.chars().collect();
+        at + pat.len() <= chars.len() && chars[at..at + pat.len()] == pat[..]
+    };
+    // `DecimalFormat.parse:2088-2092` - NaN before any prefix
+    if region(start, symbols.nan) {
+        return (Some(f64::NAN), start + symbols.nan.chars().count());
+    }
+    // `subparse` with (positivePrefix "", negativePrefix "-"): the longer matching prefix wins
+    let mut position = start;
+    let negative = position < chars.len() && chars[position] == symbols.minus_sign;
+    if negative {
+        position += 1;
+    }
+    // `subparseNumber`: infinity
+    if region(position, symbols.infinity) {
+        let end = position + symbols.infinity.chars().count();
+        return (Some(if negative { f64::NEG_INFINITY } else { f64::INFINITY }), end);
+    }
+    // the digits, the decimal separator, the grouping separators and the exponent
+    let mut digits = String::new();
+    let mut saw_decimal = false;
+    let mut saw_digit = false;
+    let mut backup: Option<usize> = None;
+    let mut exponent: i64 = 0;
+    while position < chars.len() {
+        let ch = chars[position];
+        if let Some(digit) = ch.to_digit(10) {
+            saw_digit = true;
+            backup = None;
+            if saw_decimal && !digits.contains('.') {
+                if digits.is_empty() {
+                    digits.push('0');
+                }
+                digits.push('.');
+            }
+            digits.push(char::from_digit(digit, 10).unwrap_or('0'));
+            position += 1;
+        } else if ch == symbols.decimal_separator && !saw_decimal {
+            saw_decimal = true;
+            backup = None;
+            position += 1;
+        } else if ch == symbols.grouping_separator && !saw_decimal {
+            // a grouping separator is consumed only when a digit follows (`backup`)
+            if backup.is_none() {
+                backup = Some(position);
+            }
+            position += 1;
+        } else if region(position, "E") {
+            // `subparseNumber` - the exponent, parsed recursively with prefixes ("", "-"); a failure leaves it unread
+            let mut at = position + 1;
+            let exponent_negative = at < chars.len() && chars[at] == symbols.minus_sign;
+            if exponent_negative {
+                at += 1;
+            }
+            let digits_start = at;
+            let mut value: i64 = 0;
+            while at < chars.len() {
+                match chars[at].to_digit(10) {
+                    Some(d) => {
+                        value = value.saturating_mul(10).saturating_add(d as i64);
+                        at += 1;
+                    }
+                    None => break,
+                }
+            }
+            if at > digits_start {
+                position = at;
+                exponent = if exponent_negative { -value } else { value };
+            }
+            break;
+        } else {
+            break;
+        }
+    }
+    if let Some(backup) = backup {
+        position = backup;
+    }
+    if !saw_digit {
+        return (None, start);
+    }
+    let mut literal = if digits.is_empty() { String::from("0") } else { digits };
+    if exponent != 0 {
+        literal.push_str(&format!("e{exponent}"));
+    }
+    let magnitude: f64 = literal.parse().unwrap_or(0.0);
+    (Some(if negative { -magnitude } else { magnitude }), position)
+}
+
+/// `Integer.toString(int i, int radix)` - lowercase digits, a leading `-` for a negative value; a radix outside
+/// 2..=36 is 10.
+pub fn integer_to_string_radix(value: i32, radix: u32) -> String {
+    let radix = if (2..=36).contains(&radix) { radix } else { 10 };
+    let negative = value < 0;
+    let mut magnitude = (value as i64).unsigned_abs();
+    let mut digits = Vec::new();
+    loop {
+        let digit = (magnitude % radix as u64) as u32;
+        digits.push(char::from_digit(digit, radix).unwrap_or('0'));
+        magnitude /= radix as u64;
+        if magnitude == 0 {
+            break;
+        }
+    }
+    if negative {
+        digits.push('-');
+    }
+    digits.iter().rev().collect()
+}
+
+/// `Character.toLowerCase(char)` - the simple (one-to-one) lowercase mapping; a character whose full mapping is more
+/// than one character keeps itself, as `UnicodeData`'s simple mapping does for those.
+pub fn char_to_lower_case(ch: char) -> char {
+    let mut lower = ch.to_lowercase();
+    match (lower.next(), lower.next()) {
+        (Some(single), None) => single,
+        _ => ch,
+    }
+}
+
+pub use tabs::{MenuTabButton, TabManager, TabNavigationBar};
+
+/// `net.minecraft.client.gui.components.tabs` (`TabManager`, `TabNavigationBar` / `MenuTabBar`, `TabButton` /
+/// `MenuTabBar.MenuTabButton`) for a screen that draws and dispatches its own widgets (the YACL screen). The game's
+/// versions live in the screen's widget tree with tabs as indices (`tab_manager.rs`, `menu_tab_bar.rs`); these hold the
+/// mod's `Tab` objects and reuse the game's sprites and geometry (`menu_tab_bar`).
+pub mod tabs {
+    use super::{ContainerEventHandler, CursorKind, Graphics, GuiEventListener, Tab, WidgetFields};
+    use mcrust::net::minecraft::client::gui::active_text_collector;
+    use mcrust::net::minecraft::client::gui::components::tabs::menu_tab_bar;
+    use mcrust::net::minecraft::client::gui::navigation::screen_rectangle::ScreenRectangle;
+    use mcrust::net::minecraft::client::input::key_event::KeyEvent;
+    use mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent;
+    use mcrust::net::minecraft::network::chat::formatted_text::FormattedText;
+    use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
+    use mcrust::net::minecraft::resources::identifier::Identifier;
+    use mcrust::net::minecraft::util::mth;
+    use std::cell::{Cell, RefCell};
+    use std::rc::Rc;
+    use std::sync::Arc;
+
+    /// `Objects.equals(a, b)` for two tabs: `Tab` does not override `equals`, so identity.
+    pub fn same_tab(a: &Arc<dyn Tab>, b: &Arc<dyn Tab>) -> bool {
+        std::ptr::eq(Arc::as_ptr(a) as *const (), Arc::as_ptr(b) as *const ())
+    }
+
+    /// `public class TabManager`
+    pub struct TabManager {
+        /// `private final Consumer<AbstractWidget> addWidget;`
+        add_widget: Box<dyn Fn(Arc<dyn GuiEventListener>)>,
+        /// `private final Consumer<AbstractWidget> removeWidget;`
+        remove_widget: Box<dyn Fn(Arc<dyn GuiEventListener>)>,
+        /// `@Nullable private Tab currentTab;`
+        current_tab: RefCell<Option<Arc<dyn Tab>>>,
+        /// `@Nullable private ScreenRectangle tabArea;`
+        tab_area: Cell<Option<ScreenRectangle>>,
+    }
+
+    impl TabManager {
+        /// `public TabManager(Consumer<AbstractWidget> addWidget, Consumer<AbstractWidget> removeWidget)` - the
+        /// `onSelected` / `onDeselected` consumers are `t -> {}`.
+        pub fn new(
+            add_widget: impl Fn(Arc<dyn GuiEventListener>) + 'static,
+            remove_widget: impl Fn(Arc<dyn GuiEventListener>) + 'static,
+        ) -> TabManager {
+            TabManager {
+                add_widget: Box::new(add_widget),
+                remove_widget: Box::new(remove_widget),
+                current_tab: RefCell::new(None),
+                tab_area: Cell::new(None),
+            }
+        }
+
+        /// `public void setTabArea(ScreenRectangle tabArea)`
+        pub fn set_tab_area(&self, tab_area: ScreenRectangle) {
+            self.tab_area.set(Some(tab_area));
+            if let Some(tab) = self.get_current_tab() {
+                tab.do_layout(tab_area);
+            }
+        }
+
+        /// `public void setCurrentTab(Tab tab, boolean playSound)`
+        pub fn set_current_tab(&self, tab: Arc<dyn Tab>, play_sound: bool) {
+            self.set_current_tab_3(tab, play_sound, true);
+        }
+
+        /// `public void setCurrentTab(Tab tab, boolean playSound, boolean addWidget)`
+        pub fn set_current_tab_3(&self, tab: Arc<dyn Tab>, play_sound: bool, add_widget: bool) {
+            let current = self.get_current_tab();
+            if current.as_ref().is_some_and(|current| same_tab(current, &tab)) {
+                return;
+            }
+            if let Some(current) = current {
+                current.visit_children(&mut |widget| (self.remove_widget)(widget));
+            }
+            *self.current_tab.borrow_mut() = Some(tab.clone());
+            if add_widget {
+                tab.visit_children(&mut |widget| (self.add_widget)(widget));
+            }
+            if let Some(tab_area) = self.tab_area.get() {
+                tab.do_layout(tab_area);
+            }
+            if play_sound {
+                // Minecraft.getInstance().getSoundManager().play(SimpleSoundInstance.forUI(SoundEvents.UI_BUTTON_CLICK, 1.0F));
+                super::play_down_sound();
+            }
+            // this.onDeselected.accept(oldTab); this.onSelected.accept(this.currentTab); - both `t -> {}`
+        }
+
+        /// `@Nullable public Tab getCurrentTab()`
+        pub fn get_current_tab(&self) -> Option<Arc<dyn Tab>> {
+            self.current_tab.borrow().clone()
+        }
+    }
+
+    /// `MenuTabBar.MenuTabButton extends TabButton extends AbstractWidget.WithInactiveMessage`
+    pub struct MenuTabButton {
+        /// the `AbstractWidget` fields
+        pub fields: WidgetFields,
+        /// `private final TabManager tabManager;`
+        tab_manager: Rc<TabManager>,
+        /// `private final Tab tab;`
+        tab: Arc<dyn Tab>,
+    }
+
+    impl MenuTabButton {
+        /// `public MenuTabButton(TabManager tabManager, Tab tab, int width, int height)` -
+        /// `super(0, 0, width, height, tab.getTabTitle())`
+        pub fn new(tab_manager: Rc<TabManager>, tab: Arc<dyn Tab>, width: i32, height: i32) -> MenuTabButton {
+            let title = tab.get_tab_title();
+            MenuTabButton { fields: WidgetFields::new(0, 0, width, height, title), tab_manager, tab }
+        }
+
+        /// `public Tab tab()`
+        pub fn tab(&self) -> Arc<dyn Tab> {
+            self.tab.clone()
+        }
+
+        /// `public boolean isSelected()` - `this.tabManager.getCurrentTab() == this.tab`
+        pub fn is_selected(&self) -> bool {
+            self.tab_manager.get_current_tab().is_some_and(|current| same_tab(&current, &self.tab))
+        }
+
+        /// `protected void renderMenuBackground(..)` -
+        /// `Screen.extractMenuBackgroundTexture(graphics, MENU_BACKGROUND, x0, y0, 0, 0, x1 - x0, y1 - y0)`
+        fn render_menu_background(&self, graphics: &Graphics<'_>, x0: i32, y0: i32, x1: i32, y1: i32) {
+            graphics.blit(
+                &Identifier::with_default_namespace("textures/gui/menu_background.png"),
+                x0,
+                y0,
+                0.0,
+                0.0,
+                x1 - x0,
+                y1 - y0,
+                32,
+                32,
+            );
+        }
+
+        /// `private void renderLabel(ActiveTextCollector output)`
+        fn render_label(&self, graphics: &Graphics<'_>) {
+            let f = &self.fields;
+            let left = f.get_x() + 1;
+            let top = f.get_y() + if self.is_selected() { 0 } else { menu_tab_bar::SELECTED_OFFSET };
+            let right = f.get_x() + f.get_width() - 1;
+            let bottom = f.get_y() + f.get_height();
+            let message = FormattedText::from(f.get_message());
+            let placement = active_text_collector::accept_scrolling_with_default_center(
+                left,
+                right,
+                top,
+                bottom,
+                super::font().width_of(&message),
+                mcrust::net::minecraft::util::util::get_millis(),
+            );
+            if let Some((l, r, t, b)) = placement.scissor {
+                graphics.enable_scissor(l, t, r, b);
+            }
+            graphics.text(&message, placement.x, placement.y, mcrust::net::minecraft::util::argb::white_f32(f.alpha.get()), true);
+            if placement.scissor.is_some() {
+                graphics.disable_scissor();
+            }
+        }
+
+        /// `private void renderFocusUnderline(GuiGraphicsExtractor graphics, Font font, int color)`
+        fn render_focus_underline(&self, graphics: &Graphics<'_>, color: i32) {
+            let f = &self.fields;
+            let message_width = super::font().width_of(&FormattedText::from(f.get_message()));
+            let (left, top, right, bottom) =
+                menu_tab_bar::underline_bounds(f.get_x(), f.get_y(), f.get_width(), f.get_height(), message_width);
+            graphics.fill(left, top, right, bottom, color);
+        }
+    }
+
+    impl GuiEventListener for MenuTabButton {
+        /// `AbstractWidget.extractRenderState` -> `MenuTabButton.extractWidgetRenderState`
+        fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, _a: f32) {
+            let f = &self.fields;
+            if !f.visible.get() {
+                return;
+            }
+            f.update_hover(mouse_x, mouse_y);
+
+            graphics.blit_sprite(
+                &menu_tab_bar::sprite(self.is_selected(), f.is_hovered_or_focused()),
+                f.get_x(),
+                f.get_y(),
+                f.get_width(),
+                f.get_height(),
+            );
+            let underline_color = menu_tab_bar::underline_color(f.active.get());
+            if self.is_selected() {
+                self.render_menu_background(graphics, f.get_x() + 2, f.get_y() + 2, f.get_right() - 2, f.get_bottom());
+                self.render_focus_underline(graphics, underline_color);
+            }
+            self.render_label(graphics);
+            // this.handleCursor(graphics);
+            if f.is_hovered() {
+                graphics.request_cursor(if f.is_active() { CursorKind::PointingHand } else { CursorKind::NotAllowed });
+            }
+            f.refresh_tooltip_for_next_render_pass(graphics, mouse_x, mouse_y);
+        }
+
+        /// `AbstractWidget.mouseClicked` - `playDownSound` is empty for a `TabButton` and `onClick` does nothing; the
+        /// bar switches the tab when it takes the focus.
+        fn mouse_clicked(&self, event: &MouseButtonEvent, _double_click: bool) -> bool {
+            self.fields.is_active() && event.button() == 0 && self.is_mouse_over(event.x(), event.y())
+        }
+
+        fn mouse_released(&self, event: &MouseButtonEvent) -> bool {
+            event.button() == 0
+        }
+
+        fn mouse_dragged(&self, event: &MouseButtonEvent, _dx: f64, _dy: f64) -> bool {
+            event.button() == 0
+        }
+
+        fn is_mouse_over(&self, x: f64, y: f64) -> bool {
+            self.fields.is_mouse_over(x, y)
+        }
+
+        fn set_focused(&self, focused: bool) {
+            self.fields.focused.set(focused);
+        }
+
+        fn is_focused(&self) -> bool {
+            self.fields.focused.get()
+        }
+    }
+
+    /// `public class TabNavigationBar extends AbstractContainerWidget` and `MenuTabBar extends TabNavigationBar` - the
+    /// fields and the bodies a subclass (`ScrollableNavigationBar`) builds on. Its `layout` (a `FrameLayout` holding
+    /// a horizontal `LinearLayout` of the buttons) is the position the buttons are laid out from.
+    pub struct TabNavigationBar {
+        /// the `AbstractWidget` fields
+        pub fields: WidgetFields,
+        /// `protected final FrameLayout layout;` - its position
+        layout_x: Cell<i32>,
+        layout_y: Cell<i32>,
+        /// `private final TabManager tabManager;`
+        tab_manager: Rc<TabManager>,
+        /// `protected final ImmutableList<Tab> tabs;`
+        pub tabs: Vec<Arc<dyn Tab>>,
+        /// `protected final ImmutableList<TabButton> tabButtons;`
+        pub tab_buttons: Vec<Arc<MenuTabButton>>,
+        /// `AbstractContainerWidget`'s `focused` / `isDragging`
+        pub container: ContainerEventHandler,
+    }
+
+    impl TabNavigationBar {
+        /// `protected TabNavigationBar(int x, int y, int width, int height, TabManager tabManager,
+        /// ImmutableList<TabButton> tabButtons, ImmutableList<Tab> tabs)`
+        pub fn new(
+            x: i32,
+            y: i32,
+            width: i32,
+            height: i32,
+            tab_manager: Rc<TabManager>,
+            tab_buttons: Vec<Arc<MenuTabButton>>,
+            tabs: Vec<Arc<dyn Tab>>,
+        ) -> TabNavigationBar {
+            let bar = TabNavigationBar {
+                fields: WidgetFields::new(x, y, width, height, mcrust::net::minecraft::network::chat::component::empty()),
+                layout_x: Cell::new(x),
+                layout_y: Cell::new(y),
+                tab_manager,
+                tabs,
+                tab_buttons,
+                container: ContainerEventHandler::new(),
+            };
+            bar.layout_arrange_elements();
+            bar
+        }
+
+        /// `layout.arrangeElements()` - the buttons side by side from the layout's position
+        pub fn layout_arrange_elements(&self) {
+            let mut x = self.layout_x.get();
+            for button in &self.tab_buttons {
+                button.fields.set_x(x);
+                button.fields.set_y(self.layout_y.get());
+                x += button.fields.get_width();
+            }
+        }
+
+        /// `layout.getX()`
+        pub fn layout_x(&self) -> i32 {
+            self.layout_x.get()
+        }
+
+        /// `layout.getY()`
+        pub fn layout_y(&self) -> i32 {
+            self.layout_y.get()
+        }
+
+        /// `layout.setX(x)` - moves the laid-out buttons with it
+        pub fn layout_set_x(&self, x: i32) {
+            let dx = x - self.layout_x.get();
+            self.layout_x.set(x);
+            for button in &self.tab_buttons {
+                button.fields.set_x(button.fields.get_x() + dx);
+            }
+        }
+
+        /// `layout.setY(y)`
+        pub fn layout_set_y(&self, y: i32) {
+            let dy = y - self.layout_y.get();
+            self.layout_y.set(y);
+            for button in &self.tab_buttons {
+                button.fields.set_y(button.fields.get_y() + dy);
+            }
+        }
+
+        /// `layout.getHeight()` - the tallest button
+        pub fn layout_height(&self) -> i32 {
+            self.tab_buttons.iter().map(|b| b.fields.get_height()).max().unwrap_or(0)
+        }
+
+        /// `public List<Tab> getTabs()`
+        pub fn get_tabs(&self) -> &[Arc<dyn Tab>] {
+            &self.tabs
+        }
+
+        /// the `tabManager` field
+        pub fn tab_manager(&self) -> Rc<TabManager> {
+            self.tab_manager.clone()
+        }
+
+        /// `public List<? extends GuiEventListener> children()` - the tab buttons
+        pub fn children(&self) -> Vec<Arc<dyn GuiEventListener>> {
+            self.tab_buttons.iter().map(|b| b.clone() as Arc<dyn GuiEventListener>).collect()
+        }
+
+        /// `public void setFocused(@Nullable GuiEventListener focused)` - `super.setFocused(focused)`, then the tab of
+        /// an active `TabButton` becomes current
+        pub fn set_focused_child(&self, focused: Option<Arc<dyn GuiEventListener>>) {
+            self.container.set_focused(focused.clone());
+            if let Some(focused) = focused
+                && let Some(button) = self.button_of(&focused)
+                && button.fields.is_active()
+            {
+                self.tab_manager.set_current_tab(button.tab(), true);
+            }
+        }
+
+        /// `focused instanceof TabButton button` - the button `focused` is
+        pub fn button_of(&self, focused: &Arc<dyn GuiEventListener>) -> Option<Arc<MenuTabButton>> {
+            self.tab_buttons
+                .iter()
+                .find(|b| std::ptr::eq(Arc::as_ptr(b) as *const (), Arc::as_ptr(focused) as *const ()))
+                .cloned()
+        }
+
+        /// `public void selectTab(int index, boolean playSound)` - `set_focus` is the owner's
+        /// `setFocused(GuiEventListener)`
+        pub fn select_tab(&self, index: usize, play_sound: bool, set_focus: &dyn Fn(Option<Arc<dyn GuiEventListener>>)) {
+            if self.container.is_focused() {
+                set_focus(Some(self.tab_buttons[index].clone()));
+            } else if self.tab_buttons[index].fields.is_active() {
+                self.tab_manager.set_current_tab(self.tabs[index].clone(), play_sound);
+            }
+        }
+
+        /// `public void setTabActiveState(int index, boolean active)`
+        pub fn set_tab_active_state(&self, index: i32, active: bool) {
+            if index >= 0 && (index as usize) < self.tab_buttons.len() {
+                self.tab_buttons[index as usize].fields.active.set(active);
+            }
+        }
+
+        /// `public void setTabTooltip(int index, @Nullable Tooltip hint)`
+        pub fn set_tab_tooltip(&self, index: i32, hint: Option<MutableComponent>) {
+            if index >= 0 && (index as usize) < self.tab_buttons.len() {
+                self.tab_buttons[index as usize].fields.set_tooltip(hint);
+            }
+        }
+
+        /// `public boolean keyPressed(KeyEvent event)` - Ctrl+digit / Ctrl+Tab switch tabs
+        pub fn key_pressed(&self, event: &KeyEvent, set_focus: &dyn Fn(Option<Arc<dyn GuiEventListener>>)) -> bool {
+            if event.has_control_down_with_quirk() {
+                let tab_index = self.get_next_tab_index(self.current_tab_index(), event);
+                if tab_index != -1 {
+                    self.select_tab(mth::clamp_i32(tab_index, 0, self.tabs.len() as i32 - 1) as usize, true, set_focus);
+                    return true;
+                }
+            }
+            false
+        }
+
+        /// `private int getNextTabIndex(int currentTab, KeyEvent event)`
+        fn get_next_tab_index(&self, current_tab: i32, event: &KeyEvent) -> i32 {
+            let digit = event.get_digit();
+            if digit != -1 {
+                (digit - 1).rem_euclid(10)
+            } else if event.is_cycle_focus() && current_tab != -1 {
+                let next_tab_index = if event.has_shift_down() { current_tab - 1 } else { current_tab + 1 };
+                let index = next_tab_index.rem_euclid(self.tabs.len() as i32);
+                if self.tab_buttons[index as usize].fields.active.get() { index } else { self.get_next_tab_index(index, event) }
+            } else {
+                -1
+            }
+        }
+
+        /// `private int currentTabIndex()`
+        pub fn current_tab_index(&self) -> i32 {
+            let Some(current_tab) = self.tab_manager.get_current_tab() else {
+                return -1;
+            };
+            self.tabs.iter().position(|tab| same_tab(tab, &current_tab)).map_or(-1, |index| index as i32)
+        }
+
+        /// `@Nullable private TabButton currentTabButton()`
+        pub fn current_tab_button(&self) -> Option<Arc<MenuTabButton>> {
+            let index = self.current_tab_index();
+            if index != -1 { Some(self.tab_buttons[index as usize].clone()) } else { None }
+        }
+
+        /// `MenuTabBar.extractWidgetRenderState` - the two header separators, then `TabNavigationBar`'s (every button)
+        pub fn extract_menu_tab_bar(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+            let separator = Identifier::with_default_namespace("textures/gui/header_separator.png");
+            let y = self.layout_y() + self.layout_height() - 2;
+            if let Some(first) = self.tab_buttons.first() {
+                graphics.blit(&separator, 0, y, 0.0, 0.0, first.fields.get_x(), 2, 32, 2);
+            }
+            if let Some(last) = self.tab_buttons.last() {
+                graphics.blit(&separator, last.fields.get_right(), y, 0.0, 0.0, self.fields.get_width(), 2, 32, 2);
+            }
+            for button in &self.tab_buttons {
+                button.extract_render_state(graphics, mouse_x, mouse_y, a);
+            }
+        }
+
+        /// `TabNavigationBar.isMouseOver` - over one of the laid-out buttons
+        pub fn is_mouse_over_layout(&self, mouse_x: f64, mouse_y: f64) -> bool {
+            self.tab_buttons.iter().any(|b| {
+                let f = &b.fields;
+                ScreenRectangle::new_at(f.get_x(), f.get_y(), f.get_width(), f.get_height()).contains_point(mouse_x as i32, mouse_y as i32)
+            })
+        }
     }
 }

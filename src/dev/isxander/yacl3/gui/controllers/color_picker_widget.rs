@@ -1,612 +1,661 @@
-//! Ported from dev.isxander.yacl3.gui.controllers.ColorPickerWidget by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.controllers.ColorPickerWidget.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use crate::dev::isxander::yacl3::api::utils::dimension;
-use crate::dev::isxander::yacl3::api::utils::dimension::Dimension;
+use crate::dev::isxander::yacl3::api::controller::Controller;
+use crate::dev::isxander::yacl3::api::utils::dimension::{self, Dimension};
 use crate::dev::isxander::yacl3::api::utils::mutable_dimension::MutableDimension;
-use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget;
-use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidgetBase;
-use crate::dev::isxander::yacl3::gui::controllers::color_controller::ColorController;
-use crate::dev::isxander::yacl3::gui::controllers::color_controller::ColorControllerElement;
-use crate::dev::isxander::yacl3::gui::controllers::controller_popup_widget::ControllerPopupWidget;
-use crate::dev::isxander::yacl3::gui::controllers::controller_popup_widget::ControllerPopupWidgetBase;
-use crate::dev::isxander::yacl3::gui::controllers::controller_widget::ControllerWidget;
-use crate::dev::isxander::yacl3::gui::controllers::controller_widget::ControllerWidgetBase;
-use crate::dev::isxander::yacl3::gui::controllers::string::string_controller_element::StringControllerElement;
+use crate::dev::isxander::yacl3::gui::abstract_widget;
+use crate::dev::isxander::yacl3::gui::controllers::color_controller::{ColorController, ColorControllerElement};
+use crate::dev::isxander::yacl3::gui::controllers::controller_popup_widget::{self, ControllerPopupWidget, ControllerPopupWidgetBase};
+use crate::dev::isxander::yacl3::gui::controllers::controller_widget::{ControllerWidget, ControllerWidgetBase};
+use crate::dev::isxander::yacl3::gui::controllers::string::string_controller_element::StringControllerElementClass;
 use crate::dev::isxander::yacl3::gui::render::color_gradient_render_state::ColorGradientRenderState;
-use crate::dev::isxander::yacl3::gui::render::yacl_gui_element_render_state::YACLGuiElementRenderState;
+use crate::dev::isxander::yacl3::gui::render::yacl_gui_element_render_state::YACLGuiElementRenderState as _;
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
 use crate::dev::isxander::yacl3::platform::yacl_platform::YACLPlatform;
-use mcrust::com::mojang::blaze3d::platform::cursor::cursor_types::CursorTypes;
-use mcrust::java::awt::color::Color;
-use mcrust::net::minecraft::client::gui::gui_graphics_extractor;
-use mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor;
-use mcrust::net::minecraft::client::gui::narration::narration_element_output::NarrationElementOutput;
+use compat::{CursorKind, Graphics};
+use mcrust::java::awt::color::{self as awt_color, Color};
 use mcrust::net::minecraft::client::input::character_event::CharacterEvent;
+use mcrust::net::minecraft::client::input::key_event::KeyEvent;
 use mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent;
 use mcrust::net::minecraft::network::chat::component;
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
 use mcrust::net::minecraft::resources::identifier::Identifier;
 use mcrust::net::minecraft::util::mth;
-use crate::dev::isxander::yacl3::api::option::Option as _;
+use std::cell::{Cell, RefCell};
+use std::sync::Weak;
 
 /// java: public static final Identifier COLOR_PICKER_SPRITE = YACLPlatform.rl("controller/colorpicker");
-pub static COLOR_PICKER_SPRITE: compat::MainThread<Identifier> = compat::MainThread::new(|| YACLPlatform::rl("controller/colorpicker"));
+pub fn color_picker_sprite() -> Identifier {
+    YACLPlatform::rl("controller/colorpicker")
+}
+
 /// java: public static final Identifier TRANSPARENT_SPRITE = YACLPlatform.rl("controller/transparent");
-pub static TRANSPARENT_SPRITE: compat::MainThread<Identifier> = compat::MainThread::new(|| YACLPlatform::rl("controller/transparent"));
+pub fn transparent_sprite() -> Identifier {
+    YACLPlatform::rl("controller/transparent")
+}
+
+type Dim = RefCell<Option<Arc<dyn MutableDimension<i32>>>>;
+
+fn get(dim: &Dim) -> Arc<dyn MutableDimension<i32>> {
+    dim.borrow().clone().expect("ColorPickerWidget dimension before setDimension")
+}
 
 /// java: public class ColorPickerWidget extends ControllerPopupWidget<ColorController>
 pub struct ColorPickerWidget {
-    /// java: extends ControllerPopupWidget
-    pub base: ControllerPopupWidgetBase<ColorController>,
+    /// java: extends ControllerPopupWidget<ColorController>
+    pub popup: ControllerPopupWidgetBase,
     /// java: private final ColorController controller;
-    pub controller: ColorController,
-    /// java: private final ColorController.ColorControllerElement entryWidget;
-    pub entry_widget: compat::Shared<ColorControllerElement>,
+    controller: Arc<ColorController>,
+    /// java: private final ColorController.ColorControllerElement entryWidget; (held weakly: the element holds this)
+    entry_widget: Weak<ColorControllerElement>,
     /// java: protected MutableDimension<Integer> colorPickerDim;
-    pub color_picker_dim: Option<compat::Shared<dyn MutableDimension<i32>>>,
+    pub color_picker_dim: Dim,
     /// java: protected MutableDimension<Integer> previewColorDim;
-    pub preview_color_dim: Option<compat::Shared<dyn MutableDimension<i32>>>,
+    pub preview_color_dim: Dim,
     /// java: protected MutableDimension<Integer> saturationLightDim;
-    pub saturation_light_dim: Option<compat::Shared<dyn MutableDimension<i32>>>,
+    pub saturation_light_dim: Dim,
     /// java: protected MutableDimension<Integer> hueGradientDim;
-    pub hue_gradient_dim: Option<compat::Shared<dyn MutableDimension<i32>>>,
+    pub hue_gradient_dim: Dim,
     /// java: protected MutableDimension<Integer> alphaGradientDim;
-    pub alpha_gradient_dim: Option<compat::Shared<dyn MutableDimension<i32>>>,
+    pub alpha_gradient_dim: Dim,
     /// java: private boolean mouseDown;
-    pub mouse_down: bool,
+    mouse_down: Cell<bool>,
     /// java: private boolean hueSliderDown;
-    pub hue_slider_down: bool,
+    hue_slider_down: Cell<bool>,
     /// java: private boolean satLightGradientDown;
-    pub sat_light_gradient_down: bool,
+    sat_light_gradient_down: Cell<bool>,
     /// java: private boolean alphaSliderDown;
-    pub alpha_slider_down: bool,
+    alpha_slider_down: Cell<bool>,
     /// java: private int hueThumbX;
-    pub hue_thumb_x: i32,
+    hue_thumb_x: Cell<i32>,
     /// java: private int satLightThumbX;
-    pub sat_light_thumb_x: i32,
+    sat_light_thumb_x: Cell<i32>,
     /// java: private int alphaThumbX;
-    pub alpha_thumb_x: i32,
+    alpha_thumb_x: Cell<i32>,
     /// java: private boolean charTyped;
-    pub char_typed: bool,
-    /// java: private final int outline = 1;
-    pub outline: i32,
-    /// java: private final int previewPortion = 7;
-    pub preview_portion: i32,
-    /// java: private final int sliderHeight = 7;
-    pub slider_height: i32,
-    /// java: private final int paddingX = 1;
-    pub padding_x: i32,
-    /// java: private final int paddingY = 3;
-    pub padding_y: i32,
+    char_typed: Cell<bool>,
     /// java: private float[] HSL;
-    pub hsl: Vec<f32>,
+    hsl: Cell<[f32; 3]>,
     /// java: private float hue;
-    pub hue: f32,
+    hue: Cell<f32>,
     /// java: private float saturation;
-    pub saturation: f32,
+    saturation: Cell<f32>,
     /// java: private float light;
-    pub light: f32,
+    light: Cell<f32>,
     /// java: private int alpha;
-    pub alpha: i32,
-    /// the object's own shared handle: Java's `this` handed to other objects
-    pub self_ref: compat::WeakShared<Self>,
-}
-
-impl std::ops::Deref for ColorPickerWidget {
-    type Target = ControllerPopupWidgetBase<ColorController>;
-    fn deref(&self) -> &Self::Target {
-        &self.base
-    }
-}
-
-impl std::ops::DerefMut for ColorPickerWidget {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
-    }
+    alpha: Cell<i32>,
 }
 
 impl ColorPickerWidget {
-    /// java: public ColorPickerWidget(ColorController control, YACLScreen screen, Dimension<Integer> dim, ColorController.ColorControllerElement entryWidget)
-    pub fn new(mut control: ColorController, mut screen: compat::Shared<YACLScreen>, mut dim: compat::Shared<dyn Dimension<i32>>, mut entry_widget: compat::Shared<ColorControllerElement>) -> compat::Shared<Self> {
-        let __init_controller = control.clone();
-        let __init_entry_widget = entry_widget.clone();
-        let __this = compat::shared(Self {
-            base: ControllerPopupWidgetBase::<ColorController>::new(control.clone(), screen.clone(), dim.clone(), (entry_widget.clone() as compat::Shared<dyn ControllerWidget<compat::Object>>)),
-            self_ref: std::sync::Weak::new(),
-            controller: __init_controller,
-            entry_widget: __init_entry_widget,
-            color_picker_dim: None,
-            preview_color_dim: None,
-            saturation_light_dim: None,
-            hue_gradient_dim: None,
-            alpha_gradient_dim: None,
-            mouse_down: false,
-            hue_slider_down: false,
-            sat_light_gradient_down: false,
-            alpha_slider_down: false,
-            hue_thumb_x: 0,
-            sat_light_thumb_x: 0,
-            alpha_thumb_x: 0,
-            char_typed: false,
-            outline: 1,
-            preview_portion: 7,
-            slider_height: 7,
-            padding_x: 1,
-            padding_y: 3,
-            hsl: Default::default(),
-            hue: 0.0,
-            saturation: 0.0,
-            light: 0.0,
-            alpha: 0,
+    /// java: private final int outline = 1; - the width of the outline between each color picker element (color
+    /// preview, saturation/light gradient, hue gradient)
+    const OUTLINE: i32 = 1;
+    /// java: private final int previewPortion = 7; - the main color preview's portion of the color picker as a whole
+    const PREVIEW_PORTION: i32 = 7;
+    /// java: private final int sliderHeight = 7; - the height in pixels of the hue slider
+    const SLIDER_HEIGHT: i32 = 7;
+    /// java: private final int paddingX = 1; - the x padding between the color preview and saturation/light gradient
+    const PADDING_X: i32 = 1;
+    /// java: private final int paddingY = 3; - the y padding between the hue gradient and color preview & sat/light
+    const PADDING_Y: i32 = 3;
+
+    /// java: public ColorPickerWidget(ColorController control, YACLScreen screen, Dimension<Integer> dim,
+    /// ColorController.ColorControllerElement entryWidget)
+    pub fn new(
+        control: Arc<ColorController>,
+        screen: &Arc<YACLScreen>,
+        dim: Arc<dyn Dimension<i32>>,
+        entry_widget: Weak<ColorControllerElement>,
+    ) -> Arc<ColorPickerWidget> {
+        let entry_dyn: Weak<dyn ControllerWidget> = entry_widget.clone();
+        let widget = Arc::new(ColorPickerWidget {
+            popup: ControllerPopupWidgetBase::new::<Color, ColorController>(&control, screen, dim.clone(), entry_dyn),
+            controller: control,
+            entry_widget,
+            color_picker_dim: RefCell::new(None),
+            preview_color_dim: RefCell::new(None),
+            saturation_light_dim: RefCell::new(None),
+            hue_gradient_dim: RefCell::new(None),
+            alpha_gradient_dim: RefCell::new(None),
+            mouse_down: Cell::new(false),
+            hue_slider_down: Cell::new(false),
+            sat_light_gradient_down: Cell::new(false),
+            alpha_slider_down: Cell::new(false),
+            hue_thumb_x: Cell::new(0),
+            sat_light_thumb_x: Cell::new(0),
+            alpha_thumb_x: Cell::new(0),
+            char_typed: Cell::new(false),
+            hsl: Cell::new([0.0; 3]),
+            hue: Cell::new(0.0),
+            saturation: Cell::new(0.0),
+            light: Cell::new(0.0),
+            alpha: Cell::new(0),
         });
-        compat::write(&__this, |__t| __t.self_ref = std::sync::Arc::downgrade(&__this));
-        ({ let __f = compat::dispatch(&__this, |__t| __t.set_dimension()); __f(&compat::view(&__this, |a| a as compat::Shared<dyn AbstractWidget>), dim.clone()) });
-        ColorPickerWidget::update_hsl(&__this);
-        ColorPickerWidget::set_thumb_x(&__this);
-        __this
+        ControllerWidget::set_dimension(&*widget, dim);
+        widget.update_hsl();
+        widget.set_thumb_x();
+        widget
+    }
+
+    /// `entryWidget`
+    fn entry(&self) -> Arc<ColorControllerElement> {
+        self.entry_widget.upgrade().expect("a colour picker outlived its colour controller")
     }
 
     /// java: private boolean isHoveringHueSlider(double mouseX, double mouseY)
-    pub fn is_hovering_hue_slider(__this: &compat::Shared<Self>, mut mouse_x: f64, mut mouse_y: f64) -> bool {
-        return (mouse_y >= __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().y() && mouse_y <= __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().y_limit() && mouse_x >= __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().x() && mouse_x <= __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().x_limit());
+    fn is_hovering_hue_slider(&self, mouse_x: f64, mouse_y: f64) -> bool {
+        let d = get(&self.hue_gradient_dim);
+        mouse_y >= d.y() as f64 && mouse_y <= d.y_limit() as f64 && mouse_x >= d.x() as f64 && mouse_x <= d.x_limit() as f64
     }
 
     /// java: public boolean clickedHueSlider(double mouseX, double mouseY)
-    pub fn clicked_hue_slider(__this: &compat::Shared<Self>, mut mouse_x: f64, mut mouse_y: f64) -> bool {
-        if compat::read(__this, |__t| __t.sat_light_gradient_down) || compat::read(__this, |__t| __t.alpha_slider_down) {
+    pub fn clicked_hue_slider(&self, mouse_x: f64, mouse_y: f64) -> bool {
+        if self.sat_light_gradient_down.get() || self.alpha_slider_down.get() {
             return false;
         }
-        if ColorPickerWidget::is_hovering_hue_slider(__this, mouse_x, mouse_y) {
-            { let __v = true; compat::write(__this, |__t| __t.hue_slider_down = __v); }
+
+        if self.is_hovering_hue_slider(mouse_x, mouse_y) {
+            self.hue_slider_down.set(true);
         }
-        if compat::read(__this, |__t| __t.hue_slider_down) {
-            { let __v = ((mth::clamp_f64(mouse_x, __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().x(), __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().x_limit())) as i32); compat::write(__this, |__t| __t.hue_thumb_x = __v); }
+
+        if self.hue_slider_down.get() {
+            let d = get(&self.hue_gradient_dim);
+            self.hue_thumb_x.set(mth::clamp_f64(mouse_x, d.x() as f64, d.x_limit() as f64) as i32);
         }
-        return compat::read(__this, |__t| __t.hue_slider_down);
+        self.hue_slider_down.get()
     }
 
     /// java: private boolean isHoveringSatLightGradient(double mouseX, double mouseY)
-    pub fn is_hovering_sat_light_gradient(__this: &compat::Shared<Self>, mut mouse_x: f64, mut mouse_y: f64) -> bool {
-        return (mouse_y >= __this.lock().borrow().saturation_light_dim.as_ref().unwrap().y() && mouse_y <= __this.lock().borrow().saturation_light_dim.as_ref().unwrap().y_limit() && mouse_x >= __this.lock().borrow().saturation_light_dim.as_ref().unwrap().x() && mouse_x <= __this.lock().borrow().saturation_light_dim.as_ref().unwrap().x_limit());
+    fn is_hovering_sat_light_gradient(&self, mouse_x: f64, mouse_y: f64) -> bool {
+        let d = get(&self.saturation_light_dim);
+        mouse_y >= d.y() as f64 && mouse_y <= d.y_limit() as f64 && mouse_x >= d.x() as f64 && mouse_x <= d.x_limit() as f64
     }
 
     /// java: public boolean clickedSatLightGradient(double mouseX, double mouseY)
-    pub fn clicked_sat_light_gradient(__this: &compat::Shared<Self>, mut mouse_x: f64, mut mouse_y: f64) -> bool {
-        if compat::read(__this, |__t| __t.hue_slider_down) || compat::read(__this, |__t| __t.alpha_slider_down) {
+    pub fn clicked_sat_light_gradient(&self, mouse_x: f64, mouse_y: f64) -> bool {
+        if self.hue_slider_down.get() || self.alpha_slider_down.get() {
             return false;
         }
-        if ColorPickerWidget::is_hovering_sat_light_gradient(__this, mouse_x, mouse_y) {
-            { let __v = true; compat::write(__this, |__t| __t.sat_light_gradient_down = __v); }
+
+        if self.is_hovering_sat_light_gradient(mouse_x, mouse_y) {
+            self.sat_light_gradient_down.set(true);
         }
-        if compat::read(__this, |__t| __t.sat_light_gradient_down) {
-            { let __v = ((mth::clamp_f64(mouse_x, __this.lock().borrow().saturation_light_dim.as_ref().unwrap().x(), __this.lock().borrow().saturation_light_dim.as_ref().unwrap().x_limit())) as i32); compat::write(__this, |__t| __t.sat_light_thumb_x = __v); }
+
+        if self.sat_light_gradient_down.get() {
+            let d = get(&self.saturation_light_dim);
+            self.sat_light_thumb_x.set(mth::clamp_f64(mouse_x, d.x() as f64, d.x_limit() as f64) as i32);
         }
-        return compat::read(__this, |__t| __t.sat_light_gradient_down);
+        self.sat_light_gradient_down.get()
     }
 
     /// java: private boolean isHoveringAlphaSlider(double mouseX, double mouseY)
-    pub fn is_hovering_alpha_slider(__this: &compat::Shared<Self>, mut mouse_x: f64, mut mouse_y: f64) -> bool {
-        if compat::read(__this, |__t| __t.alpha_gradient_dim.clone()).is_none() {
+    fn is_hovering_alpha_slider(&self, mouse_x: f64, mouse_y: f64) -> bool {
+        let Some(d) = self.alpha_gradient_dim.borrow().clone() else {
             return false;
-        }
-        return (mouse_y >= __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().y() && mouse_y <= __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().y_limit() && mouse_x >= __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().x() && mouse_x <= __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().x_limit());
+        };
+        mouse_y >= d.y() as f64 && mouse_y <= d.y_limit() as f64 && mouse_x >= d.x() as f64 && mouse_x <= d.x_limit() as f64
     }
 
     /// java: public boolean clickedAlphaSlider(double mouseX, double mouseY)
-    pub fn clicked_alpha_slider(__this: &compat::Shared<Self>, mut mouse_x: f64, mut mouse_y: f64) -> bool {
-        if compat::read(__this, |__t| __t.sat_light_gradient_down) || compat::read(__this, |__t| __t.hue_slider_down) {
+    pub fn clicked_alpha_slider(&self, mouse_x: f64, mouse_y: f64) -> bool {
+        if self.sat_light_gradient_down.get() || self.hue_slider_down.get() {
             return false;
         }
-        if ColorPickerWidget::is_hovering_alpha_slider(__this, mouse_x, mouse_y) {
-            { let __v = true; compat::write(__this, |__t| __t.alpha_slider_down = __v); }
+
+        if self.is_hovering_alpha_slider(mouse_x, mouse_y) {
+            self.alpha_slider_down.set(true);
         }
-        if compat::read(__this, |__t| __t.alpha_slider_down) {
-            { let __v = ((mth::clamp_f64(mouse_x, __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().x(), __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().x_limit())) as i32); compat::write(__this, |__t| __t.alpha_thumb_x = __v); }
+
+        if self.alpha_slider_down.get() {
+            let d = get(&self.alpha_gradient_dim);
+            self.alpha_thumb_x.set(mth::clamp_f64(mouse_x, d.x() as f64, d.x_limit() as f64) as i32);
         }
-        return compat::read(__this, |__t| __t.alpha_slider_down);
+        self.alpha_slider_down.get()
     }
 
     /// java: public void setColorFromMouseClick(double mouseX, double mouseY)
-    pub fn set_color_from_mouse_click(__this: &compat::Shared<Self>, mut mouse_x: f64, mut mouse_y: f64) {
-        if ColorPickerWidget::clicked_sat_light_gradient(__this, mouse_x, mouse_y) {
-            ColorPickerWidget::set_sat_light_from_mouse(__this, mouse_x, mouse_y);
-        } else if ColorPickerWidget::clicked_hue_slider(__this, mouse_x, mouse_y) {
-            ColorPickerWidget::set_hue_from_mouse(__this, mouse_x);
-        } else if __this.lock().borrow().controller.allow_alpha() && ColorPickerWidget::clicked_alpha_slider(__this, mouse_x, mouse_y) {
-            ColorPickerWidget::set_alpha_from_mouse(__this, mouse_x);
+    pub fn set_color_from_mouse_click(&self, mouse_x: f64, mouse_y: f64) {
+        if self.clicked_sat_light_gradient(mouse_x, mouse_y) {
+            self.set_sat_light_from_mouse(mouse_x, mouse_y);
+        } else if self.clicked_hue_slider(mouse_x, mouse_y) {
+            self.set_hue_from_mouse(mouse_x);
+        } else if self.controller.allow_alpha() && self.clicked_alpha_slider(mouse_x, mouse_y) {
+            self.set_alpha_from_mouse(mouse_x);
         }
-    }
-
-    /// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick)
-    pub fn mouse_clicked(__this: &compat::Shared<Self>, event: &MouseButtonEvent, mut double_click: bool) -> bool {
-        if { let __f = compat::dispatch(__this, |__t| __t.is_mouse_over()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>), event.x(), event.y()) } {
-            { let __v = true; compat::write(__this, |__t| __t.mouse_down = __v); }
-            { let __v = false; compat::write(__this, |__t| __t.hue_slider_down = __v); }
-            { let __v = false; compat::write(__this, |__t| __t.sat_light_gradient_down = __v); }
-            { let __v = false; compat::write(__this, |__t| __t.alpha_slider_down = __v); }
-            ColorPickerWidget::set_color_from_mouse_click(__this, event.x(), event.y());
-            return true;
-        } else if { let __r = &compat::read(__this, |__t| __t.entry_widget.clone()); let __f = compat::dispatch(__r, |__t| __t.is_mouse_over()); __f(&compat::view(__r, |a| a as compat::Shared<dyn AbstractWidget>), event.x(), event.y()) } {
-            return ({ let __r = &compat::read(__this, |__t| __t.entry_widget.clone()); let __f = compat::dispatch(__r, |__t| __t.mouse_clicked()); __f(&compat::view(__r, |a| a as compat::Shared<dyn StringControllerElement>), event, double_click) });
-        } else {
-            __this.lock().borrow_mut().close();
-            return false;
-        }
-    }
-
-    /// java: @Override public boolean mouseReleased(@NonNull MouseButtonEvent event)
-    pub fn mouse_released(__this: &compat::Shared<Self>, event: &MouseButtonEvent) -> bool {
-        { let __v = false; compat::write(__this, |__t| __t.mouse_down = __v); }
-        return false;
-    }
-
-    /// java: @Override public boolean mouseDragged(@NonNull MouseButtonEvent event, double dx, double dy)
-    pub fn mouse_dragged(__this: &compat::Shared<Self>, event: &MouseButtonEvent, mut dx: f64, mut dy: f64) -> bool {
-        if compat::read(__this, |__t| __t.mouse_down) || { let __f = compat::dispatch(__this, |__t| __t.is_mouse_over()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>), event.x(), event.y()) } {
-            ColorPickerWidget::set_color_from_mouse_click(__this, event.x(), event.y());
-            return true;
-        }
-        // TODO(fabric2seer): `mouseDragged` is not a method of ColorControllerElement
-        //   java: return entryWidget.mouseDragged(event, dx, dy);
-        todo!("fabric2seer: the value of this function is in a TODO above")
-    }
-
-    /// java: @Override public boolean charTyped(@NonNull CharacterEvent event)
-    pub fn char_typed(__this: &compat::Shared<Self>, event: &CharacterEvent) -> bool {
-        { let __v = true; compat::write(__this, |__t| __t.char_typed = __v); }
-        return ({ let __r = &compat::read(__this, |__t| __t.entry_widget.clone()); let __f = compat::dispatch(__r, |__t| __t.char_typed()); __f(&compat::view(__r, |a| a as compat::Shared<dyn StringControllerElement>), event) });
     }
 
     /// java: public void setThumbX()
-    pub fn set_thumb_x(__this: &compat::Shared<Self>) {
-        { let __v = ColorPickerWidget::get_hue_thumb_x(__this); compat::write(__this, |__t| __t.hue_thumb_x = __v); }
-        { let __v = ColorPickerWidget::get_sat_light_thumb_x(__this); compat::write(__this, |__t| __t.sat_light_thumb_x = __v); }
-        if __this.lock().borrow().controller.allow_alpha() {
-            { let __v = ColorPickerWidget::get_alpha_thumb_x(__this); compat::write(__this, |__t| __t.alpha_thumb_x = __v); }
+    pub fn set_thumb_x(&self) {
+        // Sets the thumb x for both hue and sat/light
+        self.hue_thumb_x.set(self.get_hue_thumb_x());
+        self.sat_light_thumb_x.set(self.get_sat_light_thumb_x());
+        if self.controller.allow_alpha() {
+            self.alpha_thumb_x.set(self.get_alpha_thumb_x());
         }
     }
 
     /// java: protected int getHueThumbX()
-    pub fn get_hue_thumb_x(__this: &compat::Shared<Self>) -> i32 {
-        let mut min: i32 = __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().x();
-        let mut max: i32 = __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().x_limit();
-        let mut value: i32 = ((((min as f32) + (__this.lock().borrow().hue_gradient_dim.as_ref().unwrap().width() * compat::read(__this, |__t| __t.hue)))) as i32);
-        return mth::clamp_i32(value, min, max);
+    pub fn get_hue_thumb_x(&self) -> i32 {
+        let d = get(&self.hue_gradient_dim);
+        let min = d.x();
+        let max = d.x_limit();
+        let value = (min as f32 + d.width() as f32 * self.hue.get()) as i32;
+        mth::clamp_i32(value, min, max)
     }
 
     /// java: protected int getSatLightThumbX()
-    pub fn get_sat_light_thumb_x(__this: &compat::Shared<Self>) -> i32 {
-        let mut min: i32 = __this.lock().borrow().saturation_light_dim.as_ref().unwrap().x();
-        let mut max: i32 = __this.lock().borrow().saturation_light_dim.as_ref().unwrap().x_limit();
-        let mut value: i32 = ((((min as f32) + (__this.lock().borrow().saturation_light_dim.as_ref().unwrap().width() * compat::read(__this, |__t| __t.saturation)))) as i32);
-        return mth::clamp_i32(value, min, max);
+    pub fn get_sat_light_thumb_x(&self) -> i32 {
+        let d = get(&self.saturation_light_dim);
+        let min = d.x();
+        let max = d.x_limit();
+        let value = (min as f32 + (d.width() as f32 * self.saturation.get())) as i32;
+        mth::clamp_i32(value, min, max)
     }
 
     /// java: protected int getSatLightThumbY()
-    pub fn get_sat_light_thumb_y(__this: &compat::Shared<Self>) -> i32 {
-        let mut min: i32 = __this.lock().borrow().saturation_light_dim.as_ref().unwrap().y();
-        let mut max: i32 = __this.lock().borrow().saturation_light_dim.as_ref().unwrap().y_limit();
-        let mut value: i32 = ((((min as f32) + (__this.lock().borrow().saturation_light_dim.as_ref().unwrap().height() * (1.0f32 - compat::read(__this, |__t| __t.light))))) as i32);
-        return mth::clamp_i32(value, min, max);
+    pub fn get_sat_light_thumb_y(&self) -> i32 {
+        let d = get(&self.saturation_light_dim);
+        let min = d.y();
+        let max = d.y_limit();
+        let value = (min as f32 + (d.height() as f32 * (1.0 - self.light.get()))) as i32;
+        mth::clamp_i32(value, min, max)
     }
 
     /// java: protected int getAlphaThumbX()
-    pub fn get_alpha_thumb_x(__this: &compat::Shared<Self>) -> i32 {
-        let mut min: i32 = __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().x();
-        let mut max: i32 = __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().x_limit();
-        let mut value: i32 = max.wrapping_sub(((__this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().width()).wrapping_mul(compat::read(__this, |__t| __t.alpha))).wrapping_div(255));
-        return mth::clamp_i32(value, min, max);
+    pub fn get_alpha_thumb_x(&self) -> i32 {
+        let d = get(&self.alpha_gradient_dim);
+        let min = d.x();
+        let max = d.x_limit();
+        let value = max - (d.width() * self.alpha.get() / 255);
+        mth::clamp_i32(value, min, max)
     }
 
     /// java: public void setHueFromMouse(double mouseX)
-    pub fn set_hue_from_mouse(__this: &compat::Shared<Self>, mut mouse_x: f64) {
-        if mouse_x < __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().x() {
-            { let __v = 0.0f32; compat::write(__this, |__t| __t.hue = __v); }
-        } else if mouse_x > __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().x_limit() {
-            { let __v = 1.0f32; compat::write(__this, |__t| __t.hue = __v); }
+    pub fn set_hue_from_mouse(&self, mouse_x: f64) {
+        // Changes the hue of the pending color based on the mouseX's pos. relative to the colorPickerDim's x/xLimit
+        let d = get(&self.hue_gradient_dim);
+        if mouse_x < d.x() as f64 {
+            self.hue.set(0.0);
+        } else if mouse_x > d.x_limit() as f64 {
+            self.hue.set(1.0);
         } else {
-            let mut new_hue: f32 = ((((mouse_x - __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().x())) as f32) / __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().width());
-            { let __v = mth::clamp_f32(new_hue, 0.0f32, 1.0f32); compat::write(__this, |__t| __t.hue = __v); }
+            let new_hue = (mouse_x - d.x() as f64) as f32 / d.width() as f32;
+            self.hue.set(mth::clamp_f32(new_hue, 0.0, 1.0));
         }
-        ColorPickerWidget::set_color_controller_from_hsl(__this);
+
+        self.set_color_controller_from_hsl();
     }
 
     /// java: public void setSatLightFromMouse(double mouseX, double mouseY)
-    pub fn set_sat_light_from_mouse(__this: &compat::Shared<Self>, mut mouse_x: f64, mut mouse_y: f64) {
-        if mouse_x < __this.lock().borrow().saturation_light_dim.as_ref().unwrap().x() {
-            { let __v = 0.0f32; compat::write(__this, |__t| __t.saturation = __v); }
-        } else if mouse_x > __this.lock().borrow().saturation_light_dim.as_ref().unwrap().x_limit() {
-            { let __v = 1.0f32; compat::write(__this, |__t| __t.saturation = __v); }
+    pub fn set_sat_light_from_mouse(&self, mouse_x: f64, mouse_y: f64) {
+        let d = get(&self.saturation_light_dim);
+        if mouse_x < d.x() as f64 {
+            self.saturation.set(0.0);
+        } else if mouse_x > d.x_limit() as f64 {
+            self.saturation.set(1.0);
         } else {
-            let mut new_sat: f32 = ((((mouse_x - __this.lock().borrow().saturation_light_dim.as_ref().unwrap().x())) as f32) / __this.lock().borrow().saturation_light_dim.as_ref().unwrap().width());
-            { let __v = mth::clamp_f32(new_sat, 0.0f32, 1.0f32); compat::write(__this, |__t| __t.saturation = __v); }
+            let new_sat = (mouse_x - d.x() as f64) as f32 / d.width() as f32;
+            self.saturation.set(mth::clamp_f32(new_sat, 0.0, 1.0));
         }
-        if mouse_y < __this.lock().borrow().saturation_light_dim.as_ref().unwrap().y() {
-            { let __v = 1.0f32; compat::write(__this, |__t| __t.light = __v); }
-        } else if mouse_y > __this.lock().borrow().saturation_light_dim.as_ref().unwrap().y_limit() {
-            { let __v = 0.0f32; compat::write(__this, |__t| __t.light = __v); }
+
+        if mouse_y < d.y() as f64 {
+            self.light.set(1.0);
+        } else if mouse_y > d.y_limit() as f64 {
+            self.light.set(0.0);
         } else {
-            let mut new_light: f32 = ((((mouse_y - __this.lock().borrow().saturation_light_dim.as_ref().unwrap().y())) as f32) / __this.lock().borrow().saturation_light_dim.as_ref().unwrap().height());
-            { let __v = mth::clamp_f32((1.0f32 - new_light), 0.0f32, 1.0f32); compat::write(__this, |__t| __t.light = __v); }
+            let new_light = (mouse_y - d.y() as f64) as f32 / d.height() as f32;
+            self.light.set(mth::clamp_f32(1.0 - new_light, 0.0, 1.0));
         }
-        ColorPickerWidget::set_color_controller_from_hsl(__this);
+
+        self.set_color_controller_from_hsl();
     }
 
     /// java: public void setAlphaFromMouse(double mouseX)
-    pub fn set_alpha_from_mouse(__this: &compat::Shared<Self>, mut mouse_x: f64) {
-        if mouse_x < __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().x() {
-            { let __v = 255; compat::write(__this, |__t| __t.alpha = __v); }
-        } else if mouse_x > __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().x_limit() {
-            { let __v = 0; compat::write(__this, |__t| __t.alpha = __v); }
+    pub fn set_alpha_from_mouse(&self, mouse_x: f64) {
+        // Changes the alpha of the pending color based on the mouseX's pos.
+        let d = get(&self.alpha_gradient_dim);
+        if mouse_x < d.x() as f64 {
+            self.alpha.set(255);
+        } else if mouse_x > d.x_limit() as f64 {
+            self.alpha.set(0);
         } else {
-            let mut new_alpha: i32 = (((((mouse_x - __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().x_limit()) / __this.lock().borrow().alpha_gradient_dim.as_ref().unwrap().width()) * (-255 as f64))) as i32);
-            { let __v = mth::clamp_i32(new_alpha, 0, 255); compat::write(__this, |__t| __t.alpha = __v); }
+            let new_alpha = ((mouse_x - d.x_limit() as f64) / d.width() as f64 * -255.0) as i32;
+            self.alpha.set(mth::clamp_i32(new_alpha, 0, 255));
         }
-        ColorPickerWidget::set_color_controller_from_hsl(__this);
+
+        self.set_color_controller_from_hsl();
     }
 
     /// java: public void setColorControllerFromHSL()
-    pub fn set_color_controller_from_hsl(__this: &compat::Shared<Self>) {
-        let mut true_hue: f32 = ((((compat::read(__this, |__t| __t.hue_thumb_x)).wrapping_sub(__this.lock().borrow().color_picker_dim.as_ref().unwrap().x())) as f32) / __this.lock().borrow().color_picker_dim.as_ref().unwrap().width());
-        let mut color: Color = Color::get_hsb_color(true_hue, compat::read(__this, |__t| __t.saturation), compat::read(__this, |__t| __t.light));
-        // TODO(fabric2seer): `.getRed(..)` on a Color
-        //   java: Color returnColor = new Color(color.getRed(), color.getGreen(), color.getBlue(), alpha);
-        let mut return_color: Color = todo!("fabric2seer: the initialiser of `returnColor` (TODO above)");
-        { let (__a0,) = (return_color.clone(),); __this.lock().borrow().controller.option().lock().borrow_mut().request_set(__a0) };
+    pub fn set_color_controller_from_hsl(&self) {
+        // Updates the current color controller's pending value based from HSL to RGB
+        let picker = get(&self.color_picker_dim);
+        let true_hue = (self.hue_thumb_x.get() - picker.x()) as f32 / picker.width() as f32;
+        let color = Color::get_hsb_color(true_hue, self.saturation.get(), self.light.get());
+        let return_color = Color::new_with_alpha(color.get_red(), color.get_green(), color.get_blue(), self.alpha.get());
+        self.controller.option().request_set(return_color);
     }
 
     /// java: protected void updateHSL()
-    pub fn update_hsl(__this: &compat::Shared<Self>) {
-        { let __v = ColorPickerWidget::get_hsl(__this); compat::write(__this, |__t| __t.hsl = __v); }
-        { let __v = ColorPickerWidget::hue(__this); compat::write(__this, |__t| __t.hue = __v); }
-        { let __v = ColorPickerWidget::saturation(__this); compat::write(__this, |__t| __t.saturation = __v); }
-        { let __v = ColorPickerWidget::light(__this); compat::write(__this, |__t| __t.light = __v); }
-        { let __v = ColorPickerWidget::get_alpha(__this); compat::write(__this, |__t| __t.alpha = __v); }
-        if compat::read(__this, |__t| __t.char_typed) {
-            ColorPickerWidget::set_thumb_x(__this);
-            { let __v = false; compat::write(__this, |__t| __t.char_typed = __v); }
+    pub fn update_hsl(&self) {
+        self.hsl.set(self.get_hsl());
+        self.hue.set(self.hue());
+        self.saturation.set(self.saturation());
+        self.light.set(self.light());
+        self.alpha.set(self.get_alpha());
+        if self.char_typed.get() {
+            self.set_thumb_x();
+            self.char_typed.set(false);
         }
     }
 
     /// java: protected float[] getHSL()
-    pub fn get_hsl(__this: &compat::Shared<Self>) -> Vec<f32> {
-        let mut pending_value: Color = __this.lock().borrow().controller.option().lock().borrow().pending_value();
-        // TODO(fabric2seer): `.getRed(..)` on a Color
-        //   java: return Color.RGBtoHSB(pendingValue.getRed(), pendingValue.getGreen(), pendingValue.getBlue(), null);
-        todo!("fabric2seer: the value of this function is in a TODO above")
+    pub fn get_hsl(&self) -> [f32; 3] {
+        let pending_value = self.controller.option().pending_value();
+        Color::rgb_to_hsb(pending_value.get_red(), pending_value.get_green(), pending_value.get_blue(), None)
     }
 
-    /// java: protected float hue()
-    pub fn hue(__this: &compat::Shared<Self>) -> f32 {
-        return __this.lock().borrow().hsl[(0) as usize];
+    /// java: protected float hue() - gets the hue of the pending value
+    pub fn hue(&self) -> f32 {
+        self.hsl.get()[0]
     }
 
-    /// java: protected float saturation()
-    pub fn saturation(__this: &compat::Shared<Self>) -> f32 {
-        return __this.lock().borrow().hsl[(1) as usize];
+    /// java: protected float saturation() - gets the saturation of the pending value
+    pub fn saturation(&self) -> f32 {
+        self.hsl.get()[1]
     }
 
-    /// java: protected float light()
-    pub fn light(__this: &compat::Shared<Self>) -> f32 {
-        return __this.lock().borrow().hsl[(2) as usize];
+    /// java: protected float light() - gets the light/brightness/value of the pending value
+    pub fn light(&self) -> f32 {
+        self.hsl.get()[2]
     }
 
     /// java: protected int getAlpha()
-    pub fn get_alpha(__this: &compat::Shared<Self>) -> i32 {
-        // TODO(fabric2seer): `.getAlpha(..)` on a T
-        //   java: return controller.option().pendingValue().getAlpha();
-        todo!("fabric2seer: the value of this function is in a TODO above")
+    pub fn get_alpha(&self) -> i32 {
+        self.controller.option().pending_value().get_alpha()
     }
 
     /// java: protected float getRgbFromHueX()
-    pub fn get_rgb_from_hue_x(__this: &compat::Shared<Self>) -> f32 {
-        let mut true_hue: f32 = ((((compat::read(__this, |__t| __t.hue_thumb_x)).wrapping_sub(__this.lock().borrow().color_picker_dim.as_ref().unwrap().x())) as f32) / __this.lock().borrow().color_picker_dim.as_ref().unwrap().width());
-        // TODO(fabric2seer): static `Color.HSBtoRGB` has no Rust counterpart in the port
-        // rust: return Color::hs_bto_rgb(true_hue, 1, 1);
-        return todo!("fabric2seer: see the TODO above");
+    pub fn get_rgb_from_hue_x(&self) -> f32 {
+        let picker = get(&self.color_picker_dim);
+        let true_hue = (self.hue_thumb_x.get() - picker.x()) as f32 / picker.width() as f32;
+        Color::hsb_to_rgb(true_hue, 1.0, 1.0) as f32
     }
 
     /// java: protected int getRgbWithoutAlpha()
-    pub fn get_rgb_without_alpha(__this: &compat::Shared<Self>) -> i32 {
-        let mut pending_color: Color = __this.lock().borrow().controller.option().lock().borrow().pending_value();
-        // TODO(fabric2seer): `.getRed(..)` on a Color
-        //   java: Color returnColor = new Color(pendingColor.getRed(), pendingColor.getGreen(), pendingColor.getBlue(), 255);
-        let mut return_color: Color = todo!("fabric2seer: the initialiser of `returnColor` (TODO above)");
-        // TODO(fabric2seer): `.getRGB(..)` on a Color
-        //   java: return returnColor.getRGB();
-        todo!("fabric2seer: the value of this function is in a TODO above")
+    pub fn get_rgb_without_alpha(&self) -> i32 {
+        let pending_color = self.controller.option().pending_value();
+        let return_color = Color::new_with_alpha(pending_color.get_red(), pending_color.get_green(), pending_color.get_blue(), 255);
+        return_color.get_rgb()
     }
-
 }
 
-impl ControllerPopupWidget<crate::dev::isxander::yacl3::gui::controllers::color_controller::ColorController> for ColorPickerWidget {
-    fn controller_popup_widget_base(&self) -> &ControllerPopupWidgetBase<crate::dev::isxander::yacl3::gui::controllers::color_controller::ColorController> {
-        &self.base
+impl ControllerWidget for ColorPickerWidget {
+    fn controller_widget(&self) -> &ControllerWidgetBase {
+        &self.popup.cw
     }
-    fn controller_popup_widget_base_mut(&mut self) -> &mut ControllerPopupWidgetBase<crate::dev::isxander::yacl3::gui::controllers::color_controller::ColorController> {
-        &mut self.base
+
+    /// java: @Override public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
+    fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, _a: f32) {
+        self.update_hsl();
+
+        let thumb_width = 4;
+        let thumb_height = 4;
+        let outline = Self::OUTLINE;
+        let black = awt_color::black().get_rgb();
+        let picker = get(&self.color_picker_dim);
+        let preview = get(&self.preview_color_dim);
+        let sat_light = get(&self.saturation_light_dim);
+        let hue = get(&self.hue_gradient_dim);
+
+        graphics.push_pose();
+
+        // Background
+        graphics.blit_sprite(&color_picker_sprite(), picker.x() - 5, picker.y() - 5, picker.width() + 10, picker.height() + 10);
+
+        // Main color preview
+        // outline
+        graphics.fill(preview.x() - outline, preview.y() - outline, preview.x_limit() + outline, preview.y_limit() + outline, black);
+        // transparent texture - must be rendered BEFORE the main color preview
+        if self.controller.allow_alpha() {
+            graphics.blit_sprite(&transparent_sprite(), preview.x(), preview.y(), preview.width(), preview.height());
+        }
+        // main color preview
+        graphics.fill(preview.x(), preview.y(), preview.x_limit(), preview.y_limit(), self.controller.option().pending_value().get_rgb());
+
+        // Saturation/light gradient
+        // outline
+        graphics.fill(sat_light.x() - outline, sat_light.y() - outline, sat_light.x_limit() + outline, sat_light.y_limit() + outline, black);
+        // White to pending color's RGB from hue, left to right
+        ColorGradientRenderState::create_horizontal(
+            &graphics.extractor,
+            sat_light.x(),
+            sat_light.y(),
+            sat_light.x_limit(),
+            sat_light.y_limit(),
+            0xFFFFFFFFu32 as i32,
+            ((self.get_rgb_from_hue_x() as i32) & 0x00FFFFFF) | 0xFF000000u32 as i32,
+        )
+        .submit(&graphics.extractor);
+        // Transparent to black, top to bottom
+        graphics.fill_gradient(sat_light.x(), sat_light.y(), sat_light.x_limit(), sat_light.y_limit(), 0x00000000, 0xFF000000u32 as i32);
+
+        let sat_light_thumb_x = self.sat_light_thumb_x.get();
+        let sat_light_thumb_y = self.get_sat_light_thumb_y();
+        // Sat/light thumb shadow
+        graphics.fill(
+            sat_light_thumb_x - thumb_width / 2 - 2,
+            sat_light_thumb_y + thumb_height / 2 + 2,
+            sat_light_thumb_x + thumb_width / 2 + 1,
+            sat_light_thumb_y - thumb_height / 2 - 1,
+            0xFF404040u32 as i32,
+        );
+        // Sat/light thumb - extra 1 pixel on left and top to make it centered
+        graphics.fill(
+            sat_light_thumb_x - thumb_width / 2 - 1,
+            sat_light_thumb_y + thumb_height / 2 + 1,
+            sat_light_thumb_x + thumb_width / 2,
+            sat_light_thumb_y - thumb_height / 2,
+            -1,
+        );
+
+        // Hue gradient
+        // outline
+        graphics.fill(hue.x() - outline, hue.y() - outline, hue.x_limit() + outline, hue.y_limit() + outline, black);
+        // Hue rainbow gradient
+        abstract_widget::draw_rainbow_gradient(graphics, hue.x(), hue.y(), hue.x_limit(), hue.y_limit());
+
+        let hue_thumb_x = self.hue_thumb_x.get();
+        // Hue slider thumb shadow
+        graphics.fill(
+            hue_thumb_x - thumb_width / 2 - 1,
+            hue.y() - outline - 1,
+            hue_thumb_x + thumb_width / 2 + 1,
+            hue.y_limit() + outline + 1,
+            0xFF404040u32 as i32,
+        );
+        // Hue slider thumb
+        graphics.fill(hue_thumb_x - thumb_width / 2, hue.y() - outline, hue_thumb_x + thumb_width / 2, hue.y_limit() + outline, -1);
+
+        if self.controller.allow_alpha() {
+            let alpha = get(&self.alpha_gradient_dim);
+            // outline
+            graphics.fill(alpha.x() - outline, alpha.y() - outline, alpha.x_limit() + outline, alpha.y_limit() + outline, black);
+            // Transparent texture
+            graphics.blit_sprite(&transparent_sprite(), alpha.x(), alpha.y(), alpha.width(), Self::SLIDER_HEIGHT);
+            // Pending color to transparent
+            ColorGradientRenderState::create_horizontal(
+                &graphics.extractor,
+                alpha.x(),
+                alpha.y(),
+                alpha.x_limit(),
+                alpha.y_limit(),
+                (self.get_rgb_without_alpha() & 0x00FFFFFF) | 0xFF000000u32 as i32,
+                0x00000000,
+            )
+            .submit(&graphics.extractor);
+
+            let alpha_thumb_x = self.alpha_thumb_x.get();
+            // Alpha slider thumb shadow
+            graphics.fill(
+                alpha_thumb_x - thumb_width / 2 - 1,
+                alpha.y() - outline - 1,
+                alpha_thumb_x + thumb_width / 2 + 1,
+                alpha.y_limit() + outline + 1,
+                0xFF404040u32 as i32,
+            );
+            // Alpha slider thumb
+            graphics.fill(alpha_thumb_x - thumb_width / 2, alpha.y() - outline, alpha_thumb_x + thumb_width / 2, alpha.y_limit() + outline, -1);
+        }
+
+        graphics.pop_pose();
+
+        if self.is_hovering_hue_slider(mouse_x as f64, mouse_y as f64) {
+            graphics.request_cursor(CursorKind::ResizeEw);
+        } else if self.is_hovering_alpha_slider(mouse_x as f64, mouse_y as f64) {
+            graphics.request_cursor(CursorKind::ResizeEw);
+        } else if self.is_hovering_sat_light_gradient(mouse_x as f64, mouse_y as f64) {
+            graphics.request_cursor(CursorKind::Crosshair);
+        }
+    }
+
+    /// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick)
+    fn mouse_clicked(&self, event: &MouseButtonEvent, double_click: bool) -> bool {
+        if ControllerWidget::is_mouse_over(self, event.x(), event.y()) {
+            self.mouse_down.set(true);
+            self.hue_slider_down.set(false);
+            self.sat_light_gradient_down.set(false);
+            self.alpha_slider_down.set(false);
+            self.set_color_from_mouse_click(event.x(), event.y());
+            return true;
+        }
+        let entry = self.entry();
+        if entry.entry_is_mouse_over(event.x(), event.y()) {
+            StringControllerElementClass::mouse_clicked(&*entry, event, double_click)
+        } else {
+            // removes color picker
+            ControllerPopupWidget::close(self);
+            false
+        }
+    }
+
+    /// java: @Override public boolean mouseReleased(@NonNull MouseButtonEvent event)
+    fn mouse_released(&self, _event: &MouseButtonEvent) -> bool {
+        self.mouse_down.set(false);
+        false
+    }
+
+    /// java: @Override public boolean isMouseOver(double mouseX, double mouseY)
+    fn is_mouse_over(&self, mouse_x: f64, mouse_y: f64) -> bool {
+        // Checks if the mouse is either over the color picker or the color controller. The addition/subtraction of the
+        // outline and extra 3 pixels is to account for both the outline and the background
+        let d = get(&self.color_picker_dim);
+        let outline = Self::OUTLINE;
+        mouse_x >= (d.x() - outline - 3) as f64
+            && mouse_x <= (d.x_limit() + outline + 3) as f64
+            && mouse_y >= (d.y() - outline - 3) as f64
+            && mouse_y <= (d.y_limit() + outline + 3) as f64
+    }
+
+    /// java: @Override public boolean mouseDragged(@NonNull MouseButtonEvent event, double dx, double dy)
+    fn mouse_dragged(&self, event: &MouseButtonEvent, dx: f64, dy: f64) -> bool {
+        if self.mouse_down.get() || ControllerWidget::is_mouse_over(self, event.x(), event.y()) {
+            self.set_color_from_mouse_click(event.x(), event.y());
+            return true;
+        }
+
+        StringControllerElementClass::mouse_dragged(&*self.entry(), event, dx, dy)
+    }
+
+    /// java: @Override public boolean charTyped(@NonNull CharacterEvent event)
+    fn char_typed(&self, event: &CharacterEvent) -> bool {
+        // Done to allow for typing whilst the color picker is visible
+        self.char_typed.set(true);
+        StringControllerElementClass::char_typed(&*self.entry(), event)
+    }
+
+    /// java: ControllerPopupWidget.keyPressed(KeyEvent) - `entryWidget.keyPressed(event)`
+    fn key_pressed(&self, event: &KeyEvent) -> bool {
+        controller_popup_widget::key_pressed(self, event)
+    }
+
+    /// java: ControllerPopupWidget.getHoveredControlWidth()
+    fn get_hovered_control_width(&self) -> i32 {
+        controller_popup_widget::get_hovered_control_width(self)
+    }
+
+    /// java: @Override public void setDimension(Dimension<Integer> dim)
+    fn set_dimension(&self, dim: Arc<dyn Dimension<i32>>) {
+        // super.setDimension(dim);
+        self.popup.cw.base.set_dimension(dim.clone());
+
+        let slider_height = Self::SLIDER_HEIGHT;
+        let mut color_picker_height = (dim.height() * 2) + 7;
+        let color_picker_x = dim.center_x() - self.get_x_padding() * 2;
+        let mut color_picker_y = dim.y() - color_picker_height - slider_height;
+        let mut alpha_slider_height = 0;
+        if self.controller.allow_alpha() {
+            alpha_slider_height = slider_height + Self::OUTLINE + Self::PADDING_Y;
+            color_picker_height += alpha_slider_height;
+            color_picker_y -= alpha_slider_height;
+        }
+
+        // Check if the color picker should be moved to beneath the controller. Add additional numbers after
+        // colorPickerY to reduce the "strictness" of this detection
+        if color_picker_y < self.popup.cw.screen().tab_area().top() {
+            color_picker_y = dim.y_limit() + slider_height;
+        }
+
+        // A single dimension for the entire color picker as a whole. Division is used for the main color preview,
+        // saturation/light picker, and hue slider to determine their dimensions
+        let picker = dimension::of_int(color_picker_x, color_picker_y, dim.x_limit() - color_picker_x, color_picker_height);
+        let portion = Self::PREVIEW_PORTION;
+        let padding_x = Self::PADDING_X;
+        let padding_y = Self::PADDING_Y;
+        let preview = dimension::of_int(
+            picker.x(),
+            picker.y(),
+            (picker.x() + (picker.x_limit() / portion) - padding_x) - picker.x(),
+            (picker.y_limit() - slider_height - padding_y) - picker.y() - alpha_slider_height,
+        );
+        let sat_light = dimension::of_int(
+            picker.x() + (picker.x_limit() / portion) + padding_x + 1,
+            picker.y(),
+            picker.x_limit() - (picker.x() + (picker.x_limit() / portion) + padding_x + 1),
+            (picker.y_limit() - slider_height - padding_y) - picker.y() - alpha_slider_height,
+        );
+        let hue = dimension::of_int(picker.x(), picker.y_limit() - slider_height - alpha_slider_height, picker.width(), slider_height);
+        if self.controller.allow_alpha() {
+            *self.alpha_gradient_dim.borrow_mut() =
+                Some(dimension::of_int(hue.x(), hue.y() + alpha_slider_height, hue.width(), slider_height));
+        }
+        *self.color_picker_dim.borrow_mut() = Some(picker);
+        *self.preview_color_dim.borrow_mut() = Some(preview);
+        *self.saturation_light_dim.borrow_mut() = Some(sat_light);
+        *self.hue_gradient_dim.borrow_mut() = Some(hue);
+    }
+}
+
+impl ControllerPopupWidget for ColorPickerWidget {
+    fn controller_popup_widget(&self) -> &ControllerPopupWidgetBase {
+        &self.popup
     }
 
     /// java: @Override public void extractBackground(GuiGraphicsExtractor guiGraphics, int mouseX, int mouseY, float partialTick)
-    fn extract_background(&mut self, gui_graphics: &GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut partial_tick: f32) {
-        { let __v = ColorControllerElement::is_mouse_over_color_preview(&self.entry_widget, (mouse_x) as f64, (mouse_y) as f64); compat::write(&self.entry_widget, |__t| __t.hovered_over_color_preview = __v); }
+    fn extract_background(&self, _graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, _partial_tick: f32) {
+        let entry = self.entry();
+        entry.hovered_over_color_preview.set(entry.is_mouse_over_color_preview(mouse_x as f64, mouse_y as f64));
     }
 
     /// java: @Override public void close()
-    fn close(&mut self) {
-        ColorControllerElement::remove_color_picker(&self.entry_widget);
+    fn close(&self) {
+        self.entry().remove_color_picker();
     }
 
     /// java: @Override public Component popupTitle()
     fn popup_title(&self) -> MutableComponent {
-        return component::translatable("yacl.control.color.color_picker_title");
+        component::translatable("yacl.control.color.color_picker_title")
     }
-
-}
-
-impl ControllerWidget<compat::Object> for ColorPickerWidget {
-    fn controller_widget_base(&self) -> &ControllerWidgetBase<compat::Object> {
-        &self.base.base
-    }
-    fn controller_widget_base_mut(&mut self) -> &mut ControllerWidgetBase<compat::Object> {
-        &mut self.base.base
-    }
-
-    /// java: @Override public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    fn extract_render_state(&mut self, graphics: &mut GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut a: f32) {
-        ColorPickerWidget::update_hsl(&self.self_ref.upgrade().unwrap());
-        let mut thumb_width: i32 = 4;
-        let mut thumb_height: i32 = 4;
-        let __pose_1 = gui_graphics_extractor::push_pose();
-        let mut x1: i32 = (self.color_picker_dim.as_ref().unwrap().lock().borrow().x()).wrapping_sub(5);
-        let mut y1: i32 = (self.color_picker_dim.as_ref().unwrap().lock().borrow().y()).wrapping_sub(5);
-        let mut width1: i32 = (self.color_picker_dim.as_ref().unwrap().lock().borrow().width()).wrapping_add(10);
-        gui_graphics_extractor::blit_sprite_identifier(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), &*compat::minecraft(), mcrust::net::minecraft::client::renderer::render_pipelines::gui_textured(), COLOR_PICKER_SPRITE.get_mut(), x1, y1, width1, (self.color_picker_dim.as_ref().unwrap().lock().borrow().height()).wrapping_add(10));
-        // TODO(fabric2seer): `.getRGB(..)` on a value of unknown type
-        //   java: graphics.fill(previewColorDim.x() - outline, previewColorDim.y() - outline, previewColorDim.xLimit() + outline, previewColorDim.yLimit() + outline, Color.black.getRGB());
-        if self.controller.allow_alpha() {
-            let mut x: i32 = self.preview_color_dim.as_ref().unwrap().lock().borrow().x();
-            let mut y: i32 = self.preview_color_dim.as_ref().unwrap().lock().borrow().y();
-            let mut width: i32 = self.preview_color_dim.as_ref().unwrap().lock().borrow().width();
-            gui_graphics_extractor::blit_sprite_identifier(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), &*compat::minecraft(), mcrust::net::minecraft::client::renderer::render_pipelines::gui_textured(), TRANSPARENT_SPRITE.get_mut(), x, y, width, self.preview_color_dim.as_ref().unwrap().lock().borrow().height());
-        }
-        // TODO(fabric2seer): `.getRGB(..)` on a T
-        //   java: graphics.fill(previewColorDim.x(), previewColorDim.y(), previewColorDim.xLimit(), previewColorDim.yLimit(), controller.option().pendingValue().getRGB());
-        // TODO(fabric2seer): `.getRGB(..)` on a value of unknown type
-        //   java: graphics.fill(saturationLightDim.x() - outline, saturationLightDim.y() - outline, saturationLightDim.xLimit() + outline, saturationLightDim.yLimit() + outline, Color.black.getRGB());
-        ({ let __r = &ColorGradientRenderState::create_horizontal(graphics, self.saturation_light_dim.as_ref().unwrap().lock().borrow().x(), self.saturation_light_dim.as_ref().unwrap().lock().borrow().y(), self.saturation_light_dim.as_ref().unwrap().lock().borrow().x_limit(), self.saturation_light_dim.as_ref().unwrap().lock().borrow().y_limit(), 0xFFFFFFFFu32 as i32, ((((ColorPickerWidget::get_rgb_from_hue_x(&self.self_ref.upgrade().unwrap())) as i32) & 0x00FFFFFF) | 0xFF000000u32 as i32)); let __f = compat::dispatch(__r, |__t| __t.submit()); __f(&compat::view(__r, |a| a as compat::Shared<dyn YACLGuiElementRenderState>), graphics) });
-        // TODO(fabric2seer): `GuiGraphicsExtractor.fillGradient` has no Rust method in the port (looked for `fill_gradient` in GuiGraphicsExtractor and its supertypes)
-        // rust: graphics.fill_gradient(&self.saturation_light_dim.as_ref().unwrap().lock().borrow().x(), &self.saturation_light_dim.as_ref().unwrap().lock().borrow().y(), &self.saturation_light_dim.as_ref().unwrap().lock().borrow().x_limit(), &self.saturation_light_dim.as_ref().unwrap().lock().borrow().y_limit(), 0x00000000, 0xFF000000u32 as i32);
-        graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), (self.sat_light_thumb_x.wrapping_sub(thumb_width.wrapping_div(2))).wrapping_sub(2), ((ColorPickerWidget::get_sat_light_thumb_y(&self.self_ref.upgrade().unwrap())).wrapping_add(thumb_height.wrapping_div(2))).wrapping_add(2), (self.sat_light_thumb_x.wrapping_add(thumb_width.wrapping_div(2))).wrapping_add(1), ((ColorPickerWidget::get_sat_light_thumb_y(&self.self_ref.upgrade().unwrap())).wrapping_sub(thumb_height.wrapping_div(2))).wrapping_sub(1), 0xFF404040u32 as i32);
-        graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), (self.sat_light_thumb_x.wrapping_sub(thumb_width.wrapping_div(2))).wrapping_sub(1), ((ColorPickerWidget::get_sat_light_thumb_y(&self.self_ref.upgrade().unwrap())).wrapping_add(thumb_height.wrapping_div(2))).wrapping_add(1), self.sat_light_thumb_x.wrapping_add(thumb_width.wrapping_div(2)), (ColorPickerWidget::get_sat_light_thumb_y(&self.self_ref.upgrade().unwrap())).wrapping_sub(thumb_height.wrapping_div(2)), -1);
-        // TODO(fabric2seer): `.getRGB(..)` on a value of unknown type
-        //   java: graphics.fill(hueGradientDim.x() - outline, hueGradientDim.y() - outline, hueGradientDim.xLimit() + outline, hueGradientDim.yLimit() + outline, Color.black.getRGB());
-        ({ let __r = &self.self_ref.upgrade().unwrap(); let __f = compat::dispatch(__r, |__t| __t.draw_rainbow_gradient()); __f(&compat::view(__r, |a| a as compat::Shared<dyn AbstractWidget>), graphics, self.hue_gradient_dim.as_ref().unwrap().lock().borrow().x(), self.hue_gradient_dim.as_ref().unwrap().lock().borrow().y(), self.hue_gradient_dim.as_ref().unwrap().lock().borrow().x_limit(), self.hue_gradient_dim.as_ref().unwrap().lock().borrow().y_limit()) });
-        graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), (self.hue_thumb_x.wrapping_sub(thumb_width.wrapping_div(2))).wrapping_sub(1), ((self.hue_gradient_dim.as_ref().unwrap().lock().borrow().y()).wrapping_sub(self.outline)).wrapping_sub(1), (self.hue_thumb_x.wrapping_add(thumb_width.wrapping_div(2))).wrapping_add(1), ((self.hue_gradient_dim.as_ref().unwrap().lock().borrow().y_limit()).wrapping_add(self.outline)).wrapping_add(1), 0xFF404040u32 as i32);
-        graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), self.hue_thumb_x.wrapping_sub(thumb_width.wrapping_div(2)), (self.hue_gradient_dim.as_ref().unwrap().lock().borrow().y()).wrapping_sub(self.outline), self.hue_thumb_x.wrapping_add(thumb_width.wrapping_div(2)), (self.hue_gradient_dim.as_ref().unwrap().lock().borrow().y_limit()).wrapping_add(self.outline), -1);
-        if self.controller.allow_alpha() {
-            // TODO(fabric2seer): `.getRGB(..)` on a value of unknown type
-            //   java: graphics.fill(alphaGradientDim.x() - outline, alphaGradientDim.y() - outline, alphaGradientDim.xLimit() + outline, alphaGradientDim.yLimit() + outline, Color.black.getRGB());
-            let mut x: i32 = self.alpha_gradient_dim.as_ref().unwrap().lock().borrow().x();
-            let mut y: i32 = self.alpha_gradient_dim.as_ref().unwrap().lock().borrow().y();
-            let mut width: i32 = self.alpha_gradient_dim.as_ref().unwrap().lock().borrow().width();
-            gui_graphics_extractor::blit_sprite_identifier(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), &*compat::minecraft(), mcrust::net::minecraft::client::renderer::render_pipelines::gui_textured(), TRANSPARENT_SPRITE.get_mut(), x, y, width, self.slider_height);
-            ({ let __r = &ColorGradientRenderState::create_horizontal(graphics, self.alpha_gradient_dim.as_ref().unwrap().lock().borrow().x(), self.alpha_gradient_dim.as_ref().unwrap().lock().borrow().y(), self.alpha_gradient_dim.as_ref().unwrap().lock().borrow().x_limit(), self.alpha_gradient_dim.as_ref().unwrap().lock().borrow().y_limit(), ((ColorPickerWidget::get_rgb_without_alpha(&self.self_ref.upgrade().unwrap()) & 0x00FFFFFF) | 0xFF000000u32 as i32), 0x00000000); let __f = compat::dispatch(__r, |__t| __t.submit()); __f(&compat::view(__r, |a| a as compat::Shared<dyn YACLGuiElementRenderState>), graphics) });
-            graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), (self.alpha_thumb_x.wrapping_sub(thumb_width.wrapping_div(2))).wrapping_sub(1), ((self.alpha_gradient_dim.as_ref().unwrap().lock().borrow().y()).wrapping_sub(self.outline)).wrapping_sub(1), (self.alpha_thumb_x.wrapping_add(thumb_width.wrapping_div(2))).wrapping_add(1), ((self.alpha_gradient_dim.as_ref().unwrap().lock().borrow().y_limit()).wrapping_add(self.outline)).wrapping_add(1), 0xFF404040u32 as i32);
-            graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), self.alpha_thumb_x.wrapping_sub(thumb_width.wrapping_div(2)), (self.alpha_gradient_dim.as_ref().unwrap().lock().borrow().y()).wrapping_sub(self.outline), self.alpha_thumb_x.wrapping_add(thumb_width.wrapping_div(2)), (self.alpha_gradient_dim.as_ref().unwrap().lock().borrow().y_limit()).wrapping_add(self.outline), -1);
-        }
-        gui_graphics_extractor::pop_pose(__pose_1);
-        if ColorPickerWidget::is_hovering_hue_slider(&self.self_ref.upgrade().unwrap(), (mouse_x) as f64, (mouse_y) as f64) {
-            // TODO(fabric2seer): static `CursorTypes.RESIZE_EW` has no Rust counterpart in the port's CursorTypes file
-            // TODO(fabric2seer): `GuiGraphicsExtractor.requestCursor` has no Rust method in the port (looked for `request_cursor` in GuiGraphicsExtractor and its supertypes)
-            // rust: graphics.request_cursor(&CursorTypes::RESIZE_EW);
-        } else if ColorPickerWidget::is_hovering_alpha_slider(&self.self_ref.upgrade().unwrap(), (mouse_x) as f64, (mouse_y) as f64) {
-            // TODO(fabric2seer): static `CursorTypes.RESIZE_EW` has no Rust counterpart in the port's CursorTypes file
-            // TODO(fabric2seer): `GuiGraphicsExtractor.requestCursor` has no Rust method in the port (looked for `request_cursor` in GuiGraphicsExtractor and its supertypes)
-            // rust: graphics.request_cursor(&CursorTypes::RESIZE_EW);
-        } else if ColorPickerWidget::is_hovering_sat_light_gradient(&self.self_ref.upgrade().unwrap(), (mouse_x) as f64, (mouse_y) as f64) {
-            // TODO(fabric2seer): static `CursorTypes.CROSSHAIR` has no Rust counterpart in the port's CursorTypes file
-            // TODO(fabric2seer): `GuiGraphicsExtractor.requestCursor` has no Rust method in the port (looked for `request_cursor` in GuiGraphicsExtractor and its supertypes)
-            // rust: graphics.request_cursor(&CursorTypes::CROSSHAIR);
-        }
-    }
-
-    /// java: @Override protected int getHoveredControlWidth()
-    fn get_hovered_control_width(&self) -> i32 {
-        return 0;
-    }
-
-}
-
-impl AbstractWidget for ColorPickerWidget {
-    fn abstract_widget_base(&self) -> &AbstractWidgetBase {
-        &self.base.base.base
-    }
-    fn abstract_widget_base_mut(&mut self) -> &mut AbstractWidgetBase {
-        &mut self.base.base.base
-    }
-
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    /// java: @Override public boolean isMouseOver(double mouseX, double mouseY) (dispatch: the body for this class)
-    fn is_mouse_over(&self) -> fn(&compat::Shared<dyn AbstractWidget>, f64, f64) -> bool {
-        ColorPickerWidget::is_mouse_over_dyn
-    }
-
-    /// java: @Override public void setDimension(Dimension<Integer> dim) (dispatch: the body for this class)
-    fn set_dimension(&self) -> fn(&compat::Shared<dyn AbstractWidget>, compat::Shared<dyn Dimension<i32>>) {
-        ColorPickerWidget::set_dimension_dyn
-    }
-
-    /// java: @Override public boolean canReset() (dispatch: the body for this class)
-    fn can_reset(&self) -> fn(&compat::Shared<dyn AbstractWidget>) -> bool {
-        <dyn ControllerWidget>::can_reset_from::<Self>
-    }
-
-    /// java: @Override public NarrationPriority narrationPriority() (dispatch: the body for this class)
-    fn narration_priority(&self) -> fn(&compat::Shared<dyn AbstractWidget>) -> crate::unresolved::NarrationPriority {
-        <dyn ControllerWidget>::narration_priority_from::<Self>
-    }
-
-    /// java: @Override public void unfocus() (dispatch: the body for this class)
-    fn unfocus(&self) -> fn(&compat::Shared<dyn AbstractWidget>) {
-        <dyn ControllerWidget>::unfocus_from::<Self>
-    }
-
-    /// java: @Override public boolean matchesSearch(String query) (dispatch: the body for this class)
-    fn matches_search(&self) -> fn(&compat::Shared<dyn AbstractWidget>, &str) -> bool {
-        <dyn ControllerWidget>::matches_search_from::<Self>
-    }
-
-    /// java: @Override public void updateNarration(NarrationElementOutput builder) (dispatch: the body for this class)
-    fn update_narration(&self) -> fn(&compat::Shared<dyn AbstractWidget>, &mut dyn NarrationElementOutput) {
-        <dyn ControllerWidget>::update_narration_from::<Self>
-    }
-
-}
-
-impl ColorPickerWidget {
-    /// java: @Override public boolean isMouseOver(double mouseX, double mouseY)
-    pub fn is_mouse_over_impl(__this: &compat::Shared<Self>, mut mouse_x: f64, mut mouse_y: f64) -> bool {
-        return (mouse_x >= (((__this.lock().borrow().color_picker_dim.as_ref().unwrap().x()).wrapping_sub(compat::read(__this, |__t| __t.outline))).wrapping_sub(3) as f64) && mouse_x <= (((__this.lock().borrow().color_picker_dim.as_ref().unwrap().x_limit()).wrapping_add(compat::read(__this, |__t| __t.outline))).wrapping_add(3) as f64) && mouse_y >= (((__this.lock().borrow().color_picker_dim.as_ref().unwrap().y()).wrapping_sub(compat::read(__this, |__t| __t.outline))).wrapping_sub(3) as f64) && mouse_y <= (((__this.lock().borrow().color_picker_dim.as_ref().unwrap().y_limit()).wrapping_add(compat::read(__this, |__t| __t.outline))).wrapping_add(3) as f64));
-    }
-
-    /// ColorPickerWidget.isMouseOver as the dispatch of AbstractWidget.isMouseOver
-    pub fn is_mouse_over_dyn(__this: &compat::Shared<dyn AbstractWidget>, __p0: f64, __p1: f64) -> bool {
-        Self::is_mouse_over_impl(&compat::view_as::<Self, _, Self>(__this, |a| a), __p0, __p1)
-    }
-
-    /// java: @Override public void setDimension(Dimension<Integer> dim)
-    pub fn set_dimension_impl(__this: &compat::Shared<Self>, mut dim: compat::Shared<dyn Dimension<i32>>) {
-        <dyn AbstractWidget>::set_dimension_body(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>), dim.clone());
-        let mut color_picker_height: i32 = ((dim.lock().borrow().height()).wrapping_mul(2)).wrapping_add(7);
-        let mut color_picker_x: i32 = (dim.lock().borrow().center_x()).wrapping_sub((__this.lock().borrow().get_x_padding()).wrapping_mul(2));
-        let mut color_picker_y: i32 = ((dim.lock().borrow().y()).wrapping_sub(color_picker_height)).wrapping_sub(compat::read(__this, |__t| __t.slider_height));
-        let mut alpha_slider_height: i32 = 0;
-        if __this.lock().borrow().controller.allow_alpha() {
-            alpha_slider_height = ((compat::read(__this, |__t| __t.slider_height)).wrapping_add(compat::read(__this, |__t| __t.outline))).wrapping_add(compat::read(__this, |__t| __t.padding_y));
-            color_picker_height = color_picker_height.wrapping_add(alpha_slider_height);
-            color_picker_y = color_picker_y.wrapping_sub(alpha_slider_height);
-        }
-        if color_picker_y < compat::read(__this, |__t| __t.screen.clone()).lock().borrow().tab_area.as_ref().unwrap().top() {
-            color_picker_y = (dim.lock().borrow().y_limit()).wrapping_add(compat::read(__this, |__t| __t.slider_height));
-        }
-        { let __v = Some(dimension::of_int(color_picker_x, color_picker_y, (dim.lock().borrow().x_limit()).wrapping_sub(color_picker_x), color_picker_height)); compat::write(__this, |__t| __t.color_picker_dim = __v); }
-        { let __v = Some(dimension::of_int(__this.lock().borrow().color_picker_dim.as_ref().unwrap().x(), __this.lock().borrow().color_picker_dim.as_ref().unwrap().y(), (((__this.lock().borrow().color_picker_dim.as_ref().unwrap().x()).wrapping_add((__this.lock().borrow().color_picker_dim.as_ref().unwrap().x_limit()).wrapping_div(compat::read(__this, |__t| __t.preview_portion)))).wrapping_sub(compat::read(__this, |__t| __t.padding_x))).wrapping_sub(__this.lock().borrow().color_picker_dim.as_ref().unwrap().x()), ((((__this.lock().borrow().color_picker_dim.as_ref().unwrap().y_limit()).wrapping_sub(compat::read(__this, |__t| __t.slider_height))).wrapping_sub(compat::read(__this, |__t| __t.padding_y))).wrapping_sub(__this.lock().borrow().color_picker_dim.as_ref().unwrap().y())).wrapping_sub(alpha_slider_height))); compat::write(__this, |__t| __t.preview_color_dim = __v); }
-        { let __v = Some(dimension::of_int((((__this.lock().borrow().color_picker_dim.as_ref().unwrap().x()).wrapping_add((__this.lock().borrow().color_picker_dim.as_ref().unwrap().x_limit()).wrapping_div(compat::read(__this, |__t| __t.preview_portion)))).wrapping_add(compat::read(__this, |__t| __t.padding_x))).wrapping_add(1), __this.lock().borrow().color_picker_dim.as_ref().unwrap().y(), (__this.lock().borrow().color_picker_dim.as_ref().unwrap().x_limit()).wrapping_sub((((__this.lock().borrow().color_picker_dim.as_ref().unwrap().x()).wrapping_add((__this.lock().borrow().color_picker_dim.as_ref().unwrap().x_limit()).wrapping_div(compat::read(__this, |__t| __t.preview_portion)))).wrapping_add(compat::read(__this, |__t| __t.padding_x))).wrapping_add(1)), ((((__this.lock().borrow().color_picker_dim.as_ref().unwrap().y_limit()).wrapping_sub(compat::read(__this, |__t| __t.slider_height))).wrapping_sub(compat::read(__this, |__t| __t.padding_y))).wrapping_sub(__this.lock().borrow().color_picker_dim.as_ref().unwrap().y())).wrapping_sub(alpha_slider_height))); compat::write(__this, |__t| __t.saturation_light_dim = __v); }
-        { let __v = Some(dimension::of_int(__this.lock().borrow().color_picker_dim.as_ref().unwrap().x(), ((__this.lock().borrow().color_picker_dim.as_ref().unwrap().y_limit()).wrapping_sub(compat::read(__this, |__t| __t.slider_height))).wrapping_sub(alpha_slider_height), __this.lock().borrow().color_picker_dim.as_ref().unwrap().width(), compat::read(__this, |__t| __t.slider_height))); compat::write(__this, |__t| __t.hue_gradient_dim = __v); }
-        if __this.lock().borrow().controller.allow_alpha() {
-            { let __v = Some(dimension::of_int(__this.lock().borrow().hue_gradient_dim.as_ref().unwrap().x(), (__this.lock().borrow().hue_gradient_dim.as_ref().unwrap().y()).wrapping_add(alpha_slider_height), __this.lock().borrow().hue_gradient_dim.as_ref().unwrap().width(), compat::read(__this, |__t| __t.slider_height))); compat::write(__this, |__t| __t.alpha_gradient_dim = __v); }
-        }
-    }
-
-    /// ColorPickerWidget.setDimension as the dispatch of AbstractWidget.setDimension
-    pub fn set_dimension_dyn(__this: &compat::Shared<dyn AbstractWidget>, __p0: compat::Shared<dyn Dimension<i32>>) {
-        Self::set_dimension_impl(&compat::view_as::<Self, _, Self>(__this, |a| a), __p0)
-    }
-
 }

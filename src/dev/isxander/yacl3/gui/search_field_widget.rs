@@ -1,113 +1,132 @@
-//! Ported from dev.isxander.yacl3.gui.SearchFieldWidget by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.SearchFieldWidget.
+//!
+//! `extends EditBox`: the YACL screen draws and dispatches its own widgets (PATTERNS_Y2.md P3), so the box is a
+//! `compat::EditBoxWidget` (the game's `EditBox` state and look).
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
-use mcrust::net::minecraft::client::gui::components::edit_box;
-use mcrust::net::minecraft::client::gui::components::edit_box::EditBox;
-use mcrust::net::minecraft::client::gui::components::edit_box::Responder;
-use mcrust::net::minecraft::client::gui::components::edit_box::ResponderLambda;
-use mcrust::net::minecraft::client::gui::font::Font;
-use mcrust::net::minecraft::client::gui::gui_graphics_extractor;
-use mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor;
+use compat::{EditBoxWidget, Graphics, GuiEventListener};
+use mcrust::net::minecraft::client::input::character_event::CharacterEvent;
+use mcrust::net::minecraft::client::input::key_event::KeyEvent;
+use mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent;
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
+use std::cell::{Cell, RefCell};
+use std::sync::Weak;
 
 /// java: public class SearchFieldWidget extends EditBox
 pub struct SearchFieldWidget {
-    /// java: extends net.minecraft.client.gui.components.EditBox
-    pub base: EditBox,
+    /// java: extends EditBox
+    pub edit_box: EditBoxWidget,
     /// java: private Component emptyText;
-    pub empty_text: Option<MutableComponent>,
-    /// java: private final YACLScreen yaclScreen;
-    pub yacl_screen: Option<compat::Shared<YACLScreen>>,
-    /// java: private final Font font;
-    pub font: Option<Font>,
-    /// java: private final Consumer<String> updateConsumer;
-    pub update_consumer: Option<Arc<dyn Fn(String)>>,
-    /// java: private boolean isEmpty = true;
-    pub is_empty: bool,
-    /// java: private boolean doNotUpdate = false;
-    pub do_not_update: bool,
-}
-
-impl std::ops::Deref for SearchFieldWidget {
-    type Target = EditBox;
-    fn deref(&self) -> &Self::Target {
-        &self.base
-    }
-}
-
-impl std::ops::DerefMut for SearchFieldWidget {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
-    }
+    empty_text: RefCell<MutableComponent>,
+    /// java: private final YACLScreen yaclScreen; (held weakly: the screen holds its widgets)
+    #[allow(dead_code)]
+    yacl_screen: Weak<YACLScreen>,
+    /// java: private boolean isEmpty = true; (shared with the responder)
+    is_empty: Rc<Cell<bool>>,
+    /// java: private boolean doNotUpdate = false; (shared with the responder)
+    do_not_update: Rc<Cell<bool>>,
 }
 
 impl SearchFieldWidget {
-    /// java: public SearchFieldWidget(YACLScreen yaclScreen, Font font, int x, int y, int width, int height, Component text, Component emptyText, Consumer<String> updateConsumer)
-    pub fn new(mut yacl_screen: compat::Shared<YACLScreen>, mut font: Font, mut x: i32, mut y: i32, mut width: i32, mut height: i32, mut text: MutableComponent, mut empty_text: MutableComponent, update_consumer: Arc<dyn Fn(String)>) -> Self {
-        // TODO(fabric2seer): `new` takes 5 argument(s) in the port (`splitter: &StringSplitter<W>, x: i32, y: i32, width: i32, height: i32`), Java passes 6
-        //   java: super(font, x, y, width, height, text);
-        let mut this: Self = todo!("constructor");
-        this.set_responder(Responder::Lambda(ResponderLambda::new(move |__a0| { this.update(__a0); })));
-        this.yacl_screen = Some(yacl_screen.clone());
-        this.font = Some(compat::font());
-        this.empty_text = Some(empty_text.clone());
-        this.update_consumer = Some(update_consumer.clone());
-        this
-    }
-
-    /// java: @Override public void extractWidgetRenderState(@NonNull GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    pub fn extract_widget_render_state(&self, graphics: &GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut a: f32) {
-        // TODO(fabric2seer): `extract_widget_render_state` takes 7 argument(s) in the port (`gl: &crate::lwjgl::opengl::Gl, gfx: &crate::net::minecraft::client::minecraft::Minecraft, w: &super::abstract_widget::AbstractWidget, e: &EditBox, millis: i64, color: i32, apply_format: Option<&dyn Fn(&str, i32) -> Option<crate::net::minecr ..`), Java passes 4
-        // rust: edit_box::extract_widget_render_state(graphics, &mouse_x, &mouse_y, &a);
-        // TODO(fabric2seer): `EditBox.isVisible` has no Rust method in the port (looked for `is_visible` in EditBox and its supertypes)
-        if self.is_visible() && self.is_empty() {
-            gui_graphics_extractor::draw_formatted_text_with_drop_shadow(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), &*compat::minecraft(), &mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(self.empty_text.clone().unwrap()), self.get_x().wrapping_add(4), self.get_y().wrapping_add((self.height.wrapping_sub(8)).wrapping_div(2)), 0x707070, true);
-        }
+    /// java: public SearchFieldWidget(YACLScreen yaclScreen, Font font, int x, int y, int width, int height,
+    /// Component text, Component emptyText, Consumer<String> updateConsumer)
+    #[allow(clippy::too_many_arguments)]
+    pub fn new(
+        yacl_screen: &Arc<YACLScreen>,
+        x: i32,
+        y: i32,
+        width: i32,
+        height: i32,
+        text: MutableComponent,
+        empty_text: MutableComponent,
+        update_consumer: impl Fn(&str) + 'static,
+    ) -> Self {
+        let edit_box = EditBoxWidget::new(x, y, width, height, text);
+        let is_empty = Rc::new(Cell::new(true));
+        let do_not_update = Rc::new(Cell::new(false));
+        // setResponder(this::update);
+        let (responder_empty, responder_do_not_update) = (is_empty.clone(), do_not_update.clone());
+        edit_box.set_responder(move |query: &str| update(&responder_empty, &responder_do_not_update, &update_consumer, query));
+        Self { edit_box, empty_text: RefCell::new(empty_text), yacl_screen: Arc::downgrade(yacl_screen), is_empty, do_not_update }
     }
 
     /// java: public void setValueDoNotUpdate(String value)
-    pub fn set_value_do_not_update(&mut self, value: &str) {
-        self.do_not_update = true;
-        // TODO(fabric2seer): `set_value` takes 2 argument(s) in the port (`splitter: &StringSplitter<W>, value: &str`), Java passes 1
-        // rust: self.set_value(value);
-        self.do_not_update = false;
-    }
-
-    /// java: private void update(String query)
-    pub fn update(&mut self, query: &str) {
-        let mut was_empty: bool = self.is_empty;
-        self.is_empty = query.is_empty();
-        if self.is_empty && was_empty {
-            return;
-        }
-        if self.do_not_update {
-            return;
-        }
-        (self.update_consumer.as_ref().unwrap())(query.to_string());
+    pub fn set_value_do_not_update(&self, value: &str) {
+        self.do_not_update.set(true);
+        self.edit_box.set_value(value);
+        self.do_not_update.set(false);
     }
 
     /// java: public String getQuery()
     pub fn get_query(&self) -> String {
-        return self.get_value().to_lowercase();
+        self.edit_box.get_value().to_lowercase()
     }
 
     /// java: public boolean isEmpty()
     pub fn is_empty(&self) -> bool {
-        return self.is_empty;
+        self.is_empty.get()
     }
 
     /// java: public Component getEmptyText()
     pub fn get_empty_text(&self) -> MutableComponent {
-        return self.empty_text.clone().unwrap();
+        self.empty_text.borrow().clone()
     }
 
     /// java: public void setEmptyText(Component emptyText)
-    pub fn set_empty_text(&mut self, mut empty_text: MutableComponent) {
-        self.empty_text = Some(empty_text.clone());
+    pub fn set_empty_text(&self, empty_text: MutableComponent) {
+        *self.empty_text.borrow_mut() = empty_text;
     }
-
 }
 
-// NOTE(fabric2seer): extractWidgetRenderState override(s) of EditBox - the port dispatches its own calls, so these run only where the mod calls them; hook the port's method to make the game call them
+/// java: private void update(String query)
+fn update(is_empty: &Cell<bool>, do_not_update: &Cell<bool>, update_consumer: &dyn Fn(&str), query: &str) {
+    let was_empty = is_empty.get();
+    is_empty.set(query.is_empty());
+
+    if is_empty.get() && was_empty {
+        return;
+    }
+
+    if do_not_update.get() {
+        return;
+    }
+    update_consumer(query);
+}
+
+impl GuiEventListener for SearchFieldWidget {
+    /// java: @Override public void extractWidgetRenderState(@NonNull GuiGraphicsExtractor graphics, int mouseX,
+    /// int mouseY, float a)
+    fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+        self.edit_box.extract_render_state(graphics, mouse_x, mouse_y, a);
+        if self.edit_box.is_visible() && self.is_empty() {
+            let height = self.edit_box.get_height();
+            graphics.text_component(&self.empty_text.borrow(), self.edit_box.get_x() + 4, self.edit_box.get_y() + (height - 8) / 2, 0x707070, true);
+        }
+    }
+    fn mouse_clicked(&self, event: &MouseButtonEvent, double_click: bool) -> bool {
+        self.edit_box.mouse_clicked(event, double_click)
+    }
+    fn mouse_released(&self, event: &MouseButtonEvent) -> bool {
+        self.edit_box.mouse_released(event)
+    }
+    fn mouse_dragged(&self, event: &MouseButtonEvent, dx: f64, dy: f64) -> bool {
+        self.edit_box.mouse_dragged(event, dx, dy)
+    }
+    fn key_pressed(&self, event: &KeyEvent) -> bool {
+        self.edit_box.key_pressed(event)
+    }
+    fn char_typed(&self, event: &CharacterEvent) -> bool {
+        self.edit_box.char_typed(event)
+    }
+    fn is_mouse_over(&self, x: f64, y: f64) -> bool {
+        self.edit_box.is_mouse_over(x, y)
+    }
+    fn set_focused(&self, focused: bool) {
+        self.edit_box.set_focused(focused)
+    }
+    fn is_focused(&self) -> bool {
+        self.edit_box.is_focused()
+    }
+}

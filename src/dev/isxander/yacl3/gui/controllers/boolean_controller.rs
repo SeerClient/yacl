@@ -1,240 +1,186 @@
-//! Ported from dev.isxander.yacl3.gui.controllers.BooleanController by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.controllers.BooleanController.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::controller::Controller;
 use crate::dev::isxander::yacl3::api::controller::value_formatter::ValueFormatter;
+use crate::dev::isxander::yacl3::api::option::Option as YOption;
 use crate::dev::isxander::yacl3::api::utils::dimension::Dimension;
-use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget;
-use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidgetBase;
-use crate::dev::isxander::yacl3::gui::controllers::controller_widget::ControllerWidget;
-use crate::dev::isxander::yacl3::gui::controllers::controller_widget::ControllerWidgetBase;
+use crate::dev::isxander::yacl3::gui::abstract_widget;
+use crate::dev::isxander::yacl3::gui::controllers::controller_widget::{self, ControllerWidget, ControllerWidgetBase};
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
-use mcrust::com::mojang::blaze3d::platform::cursor::cursor_types::CursorTypes;
-use mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor;
-use mcrust::net::minecraft::client::gui::narration::narration_element_output::NarrationElementOutput;
+use compat::{CursorKind, Graphics};
+use mcrust::com::mojang::blaze3d::platform::input_constants;
+use mcrust::net::minecraft::chat_formatting::ChatFormatting;
+use mcrust::net::minecraft::client::input::key_event::KeyEvent;
 use mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent;
+use mcrust::net::minecraft::network::chat::common_components;
 use mcrust::net::minecraft::network::chat::component;
-use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
-use crate::dev::isxander::yacl3::api::option::Option as _;
 use mcrust::net::minecraft::network::chat::component::Component as _;
+use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
 
-/// java: public static final Function<Boolean, Component> ON_OFF_FORMATTER = (state) -> state ? CommonComponents.OPTION_ON : CommonComponents.OPTION_OFF;
-pub static ON_OFF_FORMATTER: compat::MainThread<Arc<dyn Fn(bool) -> MutableComponent>> = compat::MainThread::new(|| Arc::new(move |state| (if state { mcrust::net::minecraft::network::chat::common_components::option_on() } else { mcrust::net::minecraft::network::chat::common_components::option_off() })));
-/// java: public static final Function<Boolean, Component> TRUE_FALSE_FORMATTER = (state) -> state ? Component.translatable("yacl.control.boolean.true") : Component.translatable("yacl.control.boolean.false");
-pub static TRUE_FALSE_FORMATTER: compat::MainThread<Arc<dyn Fn(bool) -> MutableComponent>> = compat::MainThread::new(|| Arc::new(move |state| (if state { component::translatable("yacl.control.boolean.true") } else { component::translatable("yacl.control.boolean.false") })));
-/// java: public static final Function<Boolean, Component> YES_NO_FORMATTER = (state) -> state ? CommonComponents.GUI_YES : CommonComponents.GUI_NO;
-pub static YES_NO_FORMATTER: compat::MainThread<Arc<dyn Fn(bool) -> MutableComponent>> = compat::MainThread::new(|| Arc::new(move |state| (if state { mcrust::net::minecraft::network::chat::common_components::gui_yes() } else { mcrust::net::minecraft::network::chat::common_components::gui_no() })));
+/// java: public static final Function<Boolean, Component> ON_OFF_FORMATTER
+pub fn on_off_formatter(state: bool) -> MutableComponent {
+    compat::component_of(if state { common_components::option_on() } else { common_components::option_off() })
+}
+
+/// java: public static final Function<Boolean, Component> TRUE_FALSE_FORMATTER
+pub fn true_false_formatter(state: bool) -> MutableComponent {
+    if state { component::translatable("yacl.control.boolean.true") } else { component::translatable("yacl.control.boolean.false") }
+}
+
+/// java: public static final Function<Boolean, Component> YES_NO_FORMATTER
+pub fn yes_no_formatter(state: bool) -> MutableComponent {
+    compat::component_of(if state { common_components::gui_yes() } else { common_components::gui_no() })
+}
 
 /// java: public class BooleanController implements Controller<Boolean>
-#[derive(Clone)]
+///
+/// This controller renders a simple formatted `Component`.
 pub struct BooleanController {
     /// java: private final Option<Boolean> option;
-    pub option: Option<compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<bool>>>,
+    option: Arc<dyn YOption<bool>>,
     /// java: private final ValueFormatter<Boolean> valueFormatter;
-    pub value_formatter: Option<compat::Shared<dyn ValueFormatter<bool>>>,
+    value_formatter: Arc<dyn ValueFormatter<bool>>,
     /// java: private final boolean coloured;
-    pub coloured: bool,
-    /// the object's own shared handle: Java's `this` handed to other objects
-    pub self_ref: compat::WeakShared<Self>,
+    coloured: bool,
 }
 
 impl BooleanController {
-    /// java: public BooleanController(Option<Boolean> option)
-    pub fn new(mut option: compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<bool>>) -> compat::Shared<Self> {
-        let __this = Self::new_3(option.clone(), ON_OFF_FORMATTER.get_mut().clone(), false);
-        __this
+    /// java: public BooleanController(Option<Boolean> option) - `this(option, ON_OFF_FORMATTER, false)`
+    pub fn new(option: Arc<dyn YOption<bool>>) -> Self {
+        Self::new_3(option, Arc::new(on_off_formatter), false)
     }
 
     /// java: public BooleanController(Option<Boolean> option, boolean coloured)
-    pub fn new_2(mut option: compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<bool>>, mut coloured: bool) -> compat::Shared<Self> {
-        let __this = Self::new_3(option.clone(), ON_OFF_FORMATTER.get_mut().clone(), coloured);
-        __this
+    pub fn new_2(option: Arc<dyn YOption<bool>>, coloured: bool) -> Self {
+        Self::new_3(option, Arc::new(on_off_formatter), coloured)
     }
 
     /// java: public BooleanController(Option<Boolean> option, Function<Boolean, Component> valueFormatter, boolean coloured)
-    pub fn new_3(mut option: compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<bool>>, value_formatter: Arc<dyn Fn(bool) -> MutableComponent>, mut coloured: bool) -> compat::Shared<Self> {
-        let __init_option = Some(option.clone());
-        let __init_value_formatter = Some(Arc::new(move |__a0| (value_formatter)(__a0.clone())));
-        let __init_coloured = coloured;
-        let __this = compat::shared(Self {
-            self_ref: std::sync::Weak::new(),
-            option: __init_option,
-            value_formatter: __init_value_formatter,
-            coloured: __init_coloured,
-        });
-        compat::write(&__this, |__t| __t.self_ref = std::sync::Arc::downgrade(&__this));
-        __this
+    pub fn new_3(option: Arc<dyn YOption<bool>>, value_formatter: Arc<dyn ValueFormatter<bool>>, coloured: bool) -> Self {
+        Self { option, value_formatter, coloured }
     }
 
-    /// java: @ApiStatus.Internal public static BooleanController createInternal(Option<Boolean> option, ValueFormatter<Boolean> formatter, boolean coloured)
-    pub fn create_internal(option: &compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<bool>>, formatter: &compat::Shared<dyn ValueFormatter<bool>>, mut coloured: bool) -> compat::Shared<BooleanController> {
-        return BooleanController::new_3(option.clone(), Arc::new(move |__a0| formatter.lock().borrow().format(&__a0)), coloured);
+    /// java: @ApiStatus.Internal public static BooleanController createInternal(Option<Boolean> option,
+    /// ValueFormatter<Boolean> formatter, boolean coloured)
+    pub fn create_internal(
+        option: Arc<dyn YOption<bool>>,
+        formatter: Arc<dyn ValueFormatter<bool>>,
+        coloured: bool,
+    ) -> Arc<dyn Controller<bool>> {
+        Arc::new(BooleanController::new_3(option, formatter, coloured))
     }
 
-    /// java: public boolean coloured()
-    pub fn coloured(__this: &compat::Shared<Self>) -> bool {
-        return compat::read(__this, |__t| __t.coloured);
+    /// java: public boolean coloured() - value format is green or red depending on the state
+    pub fn coloured(&self) -> bool {
+        self.coloured
     }
-
 }
 
 impl Controller<bool> for BooleanController {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
     /// java: @Override public Option<Boolean> option()
-    fn option(&self) -> compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<bool>> {
-        return self.option.clone().unwrap();
+    fn option(&self) -> Arc<dyn YOption<bool>> {
+        self.option.clone()
     }
 
     /// java: @Override public Component formatValue()
     fn format_value(&self) -> MutableComponent {
-        return { let (__a0,) = (&self.option().lock().borrow().pending_value(),); self.value_formatter.as_ref().unwrap().lock().borrow().format(__a0) };
+        self.value_formatter.format(self.option.pending_value())
     }
 
     /// java: @Override public AbstractWidget provideWidget(YACLScreen screen, Dimension<Integer> widgetDimension)
-    fn provide_widget(&self, screen: &compat::Shared<YACLScreen>, widget_dimension: &compat::Shared<dyn Dimension<i32>>) -> compat::Shared<dyn AbstractWidget> {
-        return (BooleanControllerElement::new(self.self_ref.upgrade().unwrap(), screen.clone(), widget_dimension.clone()) as compat::Shared<dyn AbstractWidget>);
+    fn provide_widget(
+        self: Arc<Self>,
+        screen: &Arc<YACLScreen>,
+        widget_dimension: Arc<dyn Dimension<i32>>,
+    ) -> Arc<dyn abstract_widget::AbstractWidget> {
+        Arc::new(BooleanControllerElement::new(self, screen, widget_dimension))
     }
-
 }
 
 /// java: public static class BooleanControllerElement extends ControllerWidget<BooleanController>
 pub struct BooleanControllerElement {
-    /// java: extends ControllerWidget
-    pub base: ControllerWidgetBase<compat::Shared<BooleanController>>,
-}
-
-impl std::ops::Deref for BooleanControllerElement {
-    type Target = ControllerWidgetBase<compat::Shared<BooleanController>>;
-    fn deref(&self) -> &Self::Target {
-        &self.base
-    }
-}
-
-impl std::ops::DerefMut for BooleanControllerElement {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
-    }
+    /// java: extends ControllerWidget<BooleanController>
+    pub cw: ControllerWidgetBase,
+    /// java: protected final T control;
+    pub control: Arc<BooleanController>,
 }
 
 impl BooleanControllerElement {
     /// java: public BooleanControllerElement(BooleanController control, YACLScreen screen, Dimension<Integer> dim)
-    pub fn new(mut control: compat::Shared<BooleanController>, mut screen: compat::Shared<YACLScreen>, mut dim: compat::Shared<dyn Dimension<i32>>) -> compat::Shared<Self> {
-        let __this = compat::shared(Self {
-            base: ControllerWidgetBase::<compat::Shared<BooleanController>>::new(control.clone(), screen.clone(), dim.clone()),
-        });
-        __this
-    }
-
-    /// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick)
-    pub fn mouse_clicked(__this: &compat::Shared<Self>, event: &MouseButtonEvent, mut double_click: bool) -> bool {
-        if !({ let __f = compat::dispatch(__this, |__t| __t.is_mouse_over()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>), event.x(), event.y()) }) || !(__this.lock().borrow().is_available()) {
-            return false;
-        }
-        BooleanControllerElement::toggle_setting(__this);
-        return true;
+    pub fn new(control: Arc<BooleanController>, screen: &Arc<YACLScreen>, dim: Arc<dyn Dimension<i32>>) -> Self {
+        Self { cw: ControllerWidgetBase::new::<bool, BooleanController>(&control, screen, dim), control }
     }
 
     /// java: public void toggleSetting()
-    pub fn toggle_setting(__this: &compat::Shared<Self>) {
-        // TODO(fabric2seer): `.option(..)` on a T
-        //   java: control.option().requestSet(!control.option().pendingValue());
-        ({ let __f = compat::dispatch(__this, |__t| __t.play_down_sound()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) });
+    pub fn toggle_setting(&self) {
+        let option = self.control.option();
+        option.request_set(!option.pending_value());
+        ControllerWidget::play_down_sound(self);
     }
-
-    /// java: @Override public boolean keyPressed(@NonNull KeyEvent event)
-    pub fn key_pressed(__this: &compat::Shared<Self>, event: &mcrust::net::minecraft::client::input::key_event::KeyEvent) -> bool {
-        if !(__this.lock().borrow().is_focused()) {
-            return false;
-        }
-        if event.key() == mcrust::com::mojang::blaze3d::platform::input_constants::KEY_RETURN || event.key() == 32 || event.key() == mcrust::com::mojang::blaze3d::platform::input_constants::KEY_NUMPADENTER {
-            BooleanControllerElement::toggle_setting(__this);
-            return true;
-        }
-        return false;
-    }
-
 }
 
-impl ControllerWidget<compat::Shared<crate::dev::isxander::yacl3::gui::controllers::boolean_controller::BooleanController>> for BooleanControllerElement {
-    fn controller_widget_base(&self) -> &ControllerWidgetBase<compat::Shared<crate::dev::isxander::yacl3::gui::controllers::boolean_controller::BooleanController>> {
-        &self.base
-    }
-    fn controller_widget_base_mut(&mut self) -> &mut ControllerWidgetBase<compat::Shared<crate::dev::isxander::yacl3::gui::controllers::boolean_controller::BooleanController>> {
-        &mut self.base
+impl ControllerWidget for BooleanControllerElement {
+    fn controller_widget(&self) -> &ControllerWidgetBase {
+        &self.cw
     }
 
     /// java: @Override protected void extractHoveredControl(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    fn extract_hovered_control(&self, graphics: &mut GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut a: f32) {
-    }
+    fn extract_hovered_control(&self, _graphics: &Graphics<'_>, _mouse_x: i32, _mouse_y: i32, _a: f32) {}
 
     /// java: @Override protected void extractValueText(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    fn extract_value_text(&mut self, graphics: &mut GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut a: f32) {
-        self.base.extract_value_text(graphics, mouse_x, mouse_y, a);
-        if self.hovered {
-            // TODO(fabric2seer): static `CursorTypes.POINTING_HAND` has no Rust counterpart in the port's CursorTypes file
-            // TODO(fabric2seer): static `CursorTypes.NOT_ALLOWED` has no Rust counterpart in the port's CursorTypes file
-            // TODO(fabric2seer): `GuiGraphicsExtractor.requestCursor` has no Rust method in the port (looked for `request_cursor` in GuiGraphicsExtractor and its supertypes)
-            // rust: graphics.request_cursor(&(if self.is_available() { CursorTypes::POINTING_HAND.clone() } else { CursorTypes::NOT_ALLOWED.clone() }));
+    fn extract_value_text(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+        controller_widget::extract_value_text(self, graphics, mouse_x, mouse_y, a);
+
+        if self.cw.hovered.get() {
+            graphics.request_cursor(if self.is_available() { CursorKind::PointingHand } else { CursorKind::NotAllowed });
         }
+    }
+
+    /// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick)
+    fn mouse_clicked(&self, event: &MouseButtonEvent, _double_click: bool) -> bool {
+        if !ControllerWidget::is_mouse_over(self, event.x(), event.y()) || !self.is_available() {
+            return false;
+        }
+
+        self.toggle_setting();
+        true
     }
 
     /// java: @Override protected int getHoveredControlWidth()
     fn get_hovered_control_width(&self) -> i32 {
-        return self.get_unhovered_control_width();
+        self.get_unhovered_control_width()
     }
 
     /// java: @Override protected Component getValueText()
     fn get_value_text(&self) -> MutableComponent {
-        // TODO(fabric2seer): the condition: `.coloured(..)` on a T
-        //   java: control.coloured(..)
-        if todo!("fabric2seer: the condition (TODO above)") {
-            // TODO(fabric2seer): `.option(..)` on a T
-            //   java: return super.getValueText().copy().withStyle(control.option().pendingValue() ? ChatFormatting.GREEN : ChatFormatting.RED);
+        if self.control.coloured() {
+            // super.getValueText().copy().withStyle(..)
+            return self.cw.control_format_value().copy().with_style_format(if self.control.option().pending_value() {
+                ChatFormatting::Green
+            } else {
+                ChatFormatting::Red
+            });
         }
-        return self.base.get_value_text();
+
+        self.cw.control_format_value()
     }
 
-}
+    /// java: @Override public boolean keyPressed(@NonNull KeyEvent event)
+    fn key_pressed(&self, event: &KeyEvent) -> bool {
+        if !ControllerWidget::is_focused(self) {
+            return false;
+        }
 
-impl AbstractWidget for BooleanControllerElement {
-    fn abstract_widget_base(&self) -> &AbstractWidgetBase {
-        &self.base.base
-    }
-    fn abstract_widget_base_mut(&mut self) -> &mut AbstractWidgetBase {
-        &mut self.base.base
-    }
+        if event.key() == input_constants::KEY_RETURN
+            || event.key() == input_constants::KEY_SPACE
+            || event.key() == input_constants::KEY_NUMPADENTER
+        {
+            self.toggle_setting();
+            return true;
+        }
 
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+        false
     }
-
-    /// java: @Override public boolean canReset() (dispatch: the body for this class)
-    fn can_reset(&self) -> fn(&compat::Shared<dyn AbstractWidget>) -> bool {
-        <dyn ControllerWidget>::can_reset_from::<Self>
-    }
-
-    /// java: @Override public NarrationPriority narrationPriority() (dispatch: the body for this class)
-    fn narration_priority(&self) -> fn(&compat::Shared<dyn AbstractWidget>) -> crate::unresolved::NarrationPriority {
-        <dyn ControllerWidget>::narration_priority_from::<Self>
-    }
-
-    /// java: @Override public void unfocus() (dispatch: the body for this class)
-    fn unfocus(&self) -> fn(&compat::Shared<dyn AbstractWidget>) {
-        <dyn ControllerWidget>::unfocus_from::<Self>
-    }
-
-    /// java: @Override public boolean matchesSearch(String query) (dispatch: the body for this class)
-    fn matches_search(&self) -> fn(&compat::Shared<dyn AbstractWidget>, &str) -> bool {
-        <dyn ControllerWidget>::matches_search_from::<Self>
-    }
-
-    /// java: @Override public void updateNarration(NarrationElementOutput builder) (dispatch: the body for this class)
-    fn update_narration(&self) -> fn(&compat::Shared<dyn AbstractWidget>, &mut dyn NarrationElementOutput) {
-        <dyn ControllerWidget>::update_narration_from::<Self>
-    }
-
 }

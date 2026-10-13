@@ -1,70 +1,103 @@
-//! Ported from dev.isxander.yacl3.gui.controllers.string.number.NumberFieldController by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.controllers.string.number.NumberFieldController.
+//!
+//! `public abstract class NumberFieldController<T extends Number> implements ISliderController<T>, IStringController<T>`:
+//! a subclass holds a `NumberFieldController<T>` (the class's fields) and implements `NumberFieldControllerClass`
+//! (the abstract members it supplies); the class's bodies are the functions below, which each subclass's `Controller`
+//! / `ISliderController` / `IStringController` impls call.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::controller::value_formatter::ValueFormatter;
+use crate::dev::isxander::yacl3::api::option::Option as YOption;
+use crate::dev::isxander::yacl3::api::utils::dimension::Dimension;
+use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget;
 use crate::dev::isxander::yacl3::gui::controllers::slider::i_slider_controller::ISliderController;
 use crate::dev::isxander::yacl3::gui::controllers::string::i_string_controller::IStringController;
+use crate::dev::isxander::yacl3::gui::controllers::string::string_controller_element::StringControllerElement;
+use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
+use crate::dev::isxander::yacl3::r#impl::utils::yacl_constants::LOGGER;
 use mcrust::java::text::decimal_format::DecimalFormat;
-use mcrust::java::text::decimal_format_symbols::DecimalFormatSymbols;
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
+use mcrust::net::minecraft::util::mth;
+use std::sync::LazyLock;
 
-// TODO(fabric2seer): static `NumberFormat.getInstance` has no Rust counterpart in the port
-//   java: protected static final NumberFormat NUMBER_FORMAT = NumberFormat.getInstance();
 /// java: protected static final NumberFormat NUMBER_FORMAT = NumberFormat.getInstance();
-pub static NUMBER_FORMAT: compat::MainThread<DecimalFormat> = compat::MainThread::new(|| todo!("fabric2seer: the initialiser of `NUMBER_FORMAT` - see the TODO above"));
-// TODO(fabric2seer): `get_instance` takes 1 argument(s) in the port (`locale: Locale`), Java passes 0
-//   java: private static final DecimalFormatSymbols DECIMAL_FORMAT_SYMBOLS = DecimalFormatSymbols.getInstance();
+pub static NUMBER_FORMAT: LazyLock<DecimalFormat> = LazyLock::new(compat::number_format_instance);
+
 /// java: private static final DecimalFormatSymbols DECIMAL_FORMAT_SYMBOLS = DecimalFormatSymbols.getInstance();
-pub static DECIMAL_FORMAT_SYMBOLS: compat::MainThread<DecimalFormatSymbols> = compat::MainThread::new(|| todo!("fabric2seer: the initialiser of `DECIMAL_FORMAT_SYMBOLS` - see the TODO above"));
+/// - only its grouping separator is read.
+fn decimal_format_symbols_grouping_separator() -> char {
+    mcrust::java::text::decimal_format_symbols::get_instance(mcrust::java::text::decimal_format_symbols::Locale::Us).grouping_separator
+}
 
-/// java: public abstract class NumberFieldController<T extends Number> implements ISliderController<T>, IStringController<T>
-#[derive(Clone)]
-pub struct NumberFieldControllerBase<T> {
+/// java: the fields of `NumberFieldController<T extends Number>`
+pub struct NumberFieldController<T: Clone + 'static> {
     /// java: private final Option<T> option;
-    pub option: compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<T>>,
+    option: Arc<dyn YOption<T>>,
     /// java: private final ValueFormatter<T> displayFormatter;
-    pub display_formatter: compat::Shared<dyn ValueFormatter<T>>,
+    display_formatter: Arc<dyn ValueFormatter<T>>,
 }
 
-impl<T: Clone + 'static> NumberFieldControllerBase<T> {
+impl<T: Clone + 'static> NumberFieldController<T> {
     /// java: public NumberFieldController(Option<T> option, Function<T, Component> displayFormatter)
-    pub fn new(mut option: compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<T>>, display_formatter: Arc<dyn Fn(T) -> MutableComponent>) -> Self {
-        let __init_option = option.clone();
-        let __init_display_formatter = Arc::new(move |__a0| (display_formatter)(__a0.clone()));
-        let mut this = Self {
-            option: __init_option,
-            display_formatter: __init_display_formatter,
-        };
-        this
+    pub fn new(option: Arc<dyn YOption<T>>, display_formatter: Arc<dyn ValueFormatter<T>>) -> Self {
+        Self { option, display_formatter }
     }
 
-}
-
-/// java: the virtual methods of NumberFieldController (implemented by NumberFieldControllerBase and every subclass)
-pub trait NumberFieldController<T: Clone + 'static>: ISliderController + IStringController {
-    fn number_field_controller_base(&self) -> &NumberFieldControllerBase<T>;
-    fn number_field_controller_base_mut(&mut self) -> &mut NumberFieldControllerBase<T>;
-
-    /// java: protected String transformInput(String input)
-    fn transform_input(&self, mut input: String) -> String {
-        if input.is_empty() {
-            input = "0".to_string();
-        }
-        if input == "-" {
-            input = "-0".to_string();
-        }
-        // TODO(fabric2seer): `.getGroupingSeparator(..)` on a DecimalFormatSymbols
-        //   java: return input.replace(DECIMAL_FORMAT_SYMBOLS.getGroupingSeparator() + "", "");
-        todo!("fabric2seer: the value of this function is in a TODO above")
+    /// java: @Override public Option<T> option()
+    pub fn option(&self) -> Arc<dyn YOption<T>> {
+        self.option.clone()
     }
 
+    /// java: @Override public Component formatValue()
+    pub fn format_value(&self) -> MutableComponent {
+        self.display_formatter.format(self.option.pending_value())
+    }
+
+    /// java: @Override public double interval()
+    pub fn interval(&self) -> f64 {
+        -1.0
+    }
 }
 
-// NumberFieldController.pendingValue implements ISliderController.pendingValue: it is emitted in each concrete subclass's `impl ISliderController` (Rust has no inherited impls)
-// NumberFieldController.interval implements ISliderController.interval: it is emitted in each concrete subclass's `impl ISliderController` (Rust has no inherited impls)
-// NumberFieldController.option implements Controller.option: it is emitted in each concrete subclass's `impl Controller` (Rust has no inherited impls)
-// NumberFieldController.formatValue implements Controller.formatValue: it is emitted in each concrete subclass's `impl Controller` (Rust has no inherited impls)
-// NumberFieldController.provideWidget implements Controller.provideWidget: it is emitted in each concrete subclass's `impl Controller` (Rust has no inherited impls)
-// NumberFieldController.setFromString implements IStringController.setFromString: it is emitted in each concrete subclass's `impl IStringController` (Rust has no inherited impls)
-// NumberFieldController.isInputValid implements IStringController.isInputValid: it is emitted in each concrete subclass's `impl IStringController` (Rust has no inherited impls)
+/// java: @Override public void setFromString(String value)
+pub fn set_from_string<T: Clone + 'static, C: ISliderController<T> + ?Sized>(this: &C, value: &str) {
+    // try { .. } catch (ParseException ignore)
+    let transformed = transform_input(value);
+    match compat::number_format_parse(&transformed, 0) {
+        (Some(number), _) => this.set_pending_value(mth::clamp_f64(
+            number,
+            <C as ISliderController<T>>::min(this),
+            <C as ISliderController<T>>::max(this),
+        )),
+        (None, _) => LOGGER.warn(&format!("Failed to parse number: {value}")),
+    }
+}
+
+/// java: @Override public boolean isInputValid(String input)
+pub fn is_input_valid(input: &str) -> bool {
+    let input = transform_input(input);
+    let (_, index) = compat::number_format_parse(&input, 0);
+    index == input.chars().count()
+}
+
+/// java: @Override public AbstractWidget provideWidget(YACLScreen screen, Dimension<Integer> widgetDimension)
+pub fn provide_widget<T: Clone + 'static, C: IStringController<T> + ?Sized + 'static>(
+    this: Arc<C>,
+    screen: &Arc<YACLScreen>,
+    widget_dimension: Arc<dyn Dimension<i32>>,
+) -> Arc<dyn AbstractWidget> {
+    Arc::new(StringControllerElement::new(this, screen, widget_dimension, false))
+}
+
+/// java: protected String transformInput(String input)
+pub fn transform_input(input: &str) -> String {
+    let mut input = input.to_string();
+    if input.is_empty() {
+        input = "0".to_string();
+    }
+    if input == "-" {
+        input = "-0".to_string();
+    }
+    input.replace(decimal_format_symbols_grouping_separator(), "")
+}

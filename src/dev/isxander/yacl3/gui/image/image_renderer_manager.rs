@@ -1,184 +1,208 @@
-//! Ported from dev.isxander.yacl3.gui.image.ImageRendererManager by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.image.ImageRendererManager.
+//!
+//! The two caches hold render-thread objects (`ImageRenderer`s, `CompletableFuture`s over them), so they are
+//! render-thread statics here; the image thread (`SINGLE_THREAD_EXECUTOR`) hands what it prepared back through a
+//! queue drained by a `Minecraft.execute` task, exactly where Java's `Minecraft.getInstance().execute(..)` completes it.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::gui::image::image_renderer::ImageRenderer;
-use crate::dev::isxander::yacl3::gui::image::image_renderer_factory::ImageRendererFactory;
-use crate::dev::isxander::yacl3::gui::image::image_renderer_factory::ImageSupplier;
-use crate::dev::isxander::yacl3::platform::yacl_config;
-use mcrust::com::mojang::blaze3d::systems::render_system;
-use mcrust::java::util::concurrent::completable_future::CompletableFuture;
+use crate::dev::isxander::yacl3::gui::image::image_renderer_factory::{ImageRendererFactory, ImageSupplier};
+use crate::dev::isxander::yacl3::gui::image::r#impl::animated_dynamic_texture_image::AnimatedDynamicTextureImage;
+use crate::dev::isxander::yacl3::platform::yacl_config::HANDLER;
+use crate::dev::isxander::yacl3::r#impl::utils::yacl_constants::LOGGER;
 use mcrust::net::minecraft::resources::identifier::Identifier;
-use crate::dev::isxander::yacl3::config::v2::api::config_class_handler::ConfigClassHandler as _;
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::sync::Mutex;
+use std::sync::mpsc::{Sender, channel};
 
-// TODO(fabric2seer): Executors.newSingleThreadExecutor: use std::thread / the port's executors
-//   java: private static final ExecutorService SINGLE_THREAD_EXECUTOR = Executors.newSingleThreadExecutor(task -> new Thread(task, "YACL Image Prep"));
-/// java: private static final ExecutorService SINGLE_THREAD_EXECUTOR = Executors.newSingleThreadExecutor(task -> new Thread(task, "YACL Image Prep"));
-pub static SINGLE_THREAD_EXECUTOR: compat::MainThread<crate::unresolved::ExecutorService> = compat::MainThread::new(|| todo!("fabric2seer: the initialiser of `SINGLE_THREAD_EXECUTOR` - see the TODO above"));
-/// java: private static final Map<Identifier, CompletableFuture<ImageRenderer>> IMAGE_CACHE = new ConcurrentHashMap<>();
-pub static IMAGE_CACHE: compat::MainThread<std::collections::HashMap<Identifier, mcrust::java::util::concurrent::completable_future::CompletableFuture<compat::Shared<dyn ImageRenderer>>>> = compat::MainThread::new(|| std::collections::HashMap::new());
-/// java: static final Map<Identifier, ImageRenderer> PRELOADED_IMAGE_CACHE = new ConcurrentHashMap<>();
-pub static PRELOADED_IMAGE_CACHE: compat::MainThread<std::collections::HashMap<Identifier, compat::Shared<dyn ImageRenderer>>> = compat::MainThread::new(|| std::collections::HashMap::new());
-// TODO(fabric2seer): field `preloadComplexImageFormats` of a T
-//   java: static final List<PreloadedImageFactory> PRELOADED_IMAGE_FACTORIES = Stream.of(
-//   java:             YACLConfig.HANDLER.instance().preloadComplexImageFormats ? new PreloadedImageFactory(
-//   java:                     location -> location.getPath().endsWith(".webp"),
-//   java:                     AnimatedDynamicTextureImage::createWEBPFromTexture
-//   java:             ) : null,
-//   java:             YACLConfig.HANDLER.instance().preloadComplexImageFormats ? new PreloadedImageFactory(
-//   java:                     location -> location.getPath().endsWith(".gif"),
-//   java:                     AnimatedDynamicTextureImage::createGIFFromTexture
-//   java:             ) : null
-//   java:     ).filter(Objects::nonNull).toList();
-/// java: static final List<PreloadedImageFactory> PRELOADED_IMAGE_FACTORIES = Stream.of( YACLConfig.HANDLER.instance().preloadComplexImageFormats ? new PreloadedImageFactory( location -> location.getPath().end
-pub static PRELOADED_IMAGE_FACTORIES: compat::MainThread<Vec<PreloadedImageFactory>> = compat::MainThread::new(|| todo!("fabric2seer: the initialiser of `PRELOADED_IMAGE_FACTORIES` - see the TODO above"));
+type Task = Box<dyn FnOnce() + Send>;
+
+/// java: private static final ExecutorService SINGLE_THREAD_EXECUTOR = Executors.newSingleThreadExecutor(task ->
+/// new Thread(task, "YACL Image Prep")); - started on first use, `None` once shut down.
+static SINGLE_THREAD_EXECUTOR: Mutex<Option<Option<Sender<Task>>>> = Mutex::new(None);
+
+/// `SINGLE_THREAD_EXECUTOR.submit(task)`
+fn submit(task: Task) {
+    let mut executor = SINGLE_THREAD_EXECUTOR.lock().unwrap_or_else(|p| p.into_inner());
+    if executor.is_none() {
+        let (sender, receiver) = channel::<Task>();
+        let spawned = std::thread::Builder::new().name("YACL Image Prep".to_string()).spawn(move || {
+            while let Ok(task) = receiver.recv() {
+                task();
+            }
+        });
+        *executor = Some(spawned.ok().map(|_| sender));
+    }
+    // a shut-down executor rejects the task (`RejectedExecutionException`); the image is never completed
+    if let Some(Some(sender)) = executor.as_ref() {
+        let _ = sender.send(task);
+    }
+}
+
+/// What the image thread hands back: a factory to prepare on the render thread (`OnThread`), or what it prepared
+/// (`Optional<ImageSupplier>`, empty when preparation failed).
+enum Prepared {
+    OnThread(Box<dyn ImageRendererFactory>),
+    Prepared(Option<Box<dyn ImageSupplier>>),
+}
+
+/// The image thread's results, waiting for the render thread.
+static COMPLETIONS: Mutex<Vec<(Identifier, Prepared)>> = Mutex::new(Vec::new());
+
+thread_local! {
+    /// java: private static final Map<Identifier, CompletableFuture<ImageRenderer>> IMAGE_CACHE
+    static IMAGE_CACHE: RefCell<HashMap<Identifier, compat::LocalFuture<Arc<dyn ImageRenderer>>>> = RefCell::new(HashMap::new());
+    /// java: static final Map<Identifier, ImageRenderer> PRELOADED_IMAGE_CACHE
+    pub(crate) static PRELOADED_IMAGE_CACHE: RefCell<HashMap<Identifier, Arc<dyn ImageRenderer>>> = RefCell::new(HashMap::new());
+}
+
+/// java: public record PreloadedImageFactory(Predicate<Identifier> predicate, Function<Identifier, ImageRendererFactory> factory)
+#[derive(Clone, Copy)]
+pub struct PreloadedImageFactory {
+    /// java: Predicate<Identifier> predicate
+    pub predicate: fn(&Identifier) -> bool,
+    /// java: Function<Identifier, ImageRendererFactory> factory
+    pub factory: fn(Identifier) -> Box<dyn ImageRendererFactory>,
+}
+
+/// java: static final List<PreloadedImageFactory> PRELOADED_IMAGE_FACTORIES - `.webp` and `.gif` when
+/// `preloadComplexImageFormats` is on.
+pub fn preloaded_image_factories() -> Vec<PreloadedImageFactory> {
+    let preload = compat::read(&HANDLER.get().instance(), |config| config.preload_complex_image_formats);
+    let mut factories = Vec::new();
+    if preload {
+        factories.push(PreloadedImageFactory {
+            predicate: |location| location.path().ends_with(".webp"),
+            factory: AnimatedDynamicTextureImage::create_webp_from_texture,
+        });
+        factories.push(PreloadedImageFactory {
+            predicate: |location| location.path().ends_with(".gif"),
+            factory: AnimatedDynamicTextureImage::create_gif_from_texture,
+        });
+    }
+    factories
+}
 
 /// java: public class ImageRendererManager
-#[derive(Clone)]
-pub struct ImageRendererManager {}
+pub struct ImageRendererManager;
 
 impl ImageRendererManager {
-    /// java: the implicit no-argument constructor
-    pub fn new() -> Self {
-        let mut this = Self {
-        };
-        this
-    }
-
     /// java: public static <T extends ImageRenderer> Optional<T> getImage(Identifier id)
-    pub fn get_image(id: &Identifier) -> Option<compat::Shared<dyn ImageRenderer>> {
-        if PRELOADED_IMAGE_CACHE.get_mut().contains_key(id) {
-            return PRELOADED_IMAGE_CACHE.get_mut().get(id).cloned();
+    pub fn get_image(id: &Identifier) -> Option<Arc<dyn ImageRenderer>> {
+        if let Some(image) = PRELOADED_IMAGE_CACHE.with(|cache| cache.borrow().get(id).cloned()) {
+            return Some(image);
         }
-        if IMAGE_CACHE.get_mut().contains_key(id) {
-            return Some(IMAGE_CACHE.get_mut().get(id).cloned().unwrap().get_now(None).unwrap());
-        }
-        return None;
+        IMAGE_CACHE.with(|cache| cache.borrow().get(id).cloned()).and_then(|future| {
+            if future.is_done() { Some(future.join()) } else { None }
+        })
     }
 
-    /// java: @SuppressWarnings("unchecked") public static <T extends ImageRenderer> CompletableFuture<T> registerOrGetImage(Identifier id, Supplier<ImageRendererFactory> factorySupplier)
-    pub fn register_or_get_image(mut id: Identifier, factory_supplier: Arc<dyn Fn() -> compat::Shared<dyn ImageRendererFactory>>) -> mcrust::java::util::concurrent::completable_future::CompletableFuture<compat::Shared<dyn ImageRenderer>> {
-        if PRELOADED_IMAGE_CACHE.get_mut().contains_key(&id) {
-            return CompletableFuture::completed_future(PRELOADED_IMAGE_CACHE.get_mut().get(&id).cloned());
+    /// java: public static <T extends ImageRenderer> CompletableFuture<T> registerOrGetImage(Identifier id,
+    /// Supplier<ImageRendererFactory> factorySupplier)
+    pub fn register_or_get_image(
+        id: &Identifier,
+        factory_supplier: impl FnOnce() -> Box<dyn ImageRendererFactory>,
+    ) -> compat::LocalFuture<Arc<dyn ImageRenderer>> {
+        if let Some(image) = PRELOADED_IMAGE_CACHE.with(|cache| cache.borrow().get(id).cloned()) {
+            return compat::LocalFuture::completed_future(image);
         }
-        if IMAGE_CACHE.get_mut().contains_key(&id) {
-            return IMAGE_CACHE.get_mut().get(&id).cloned().unwrap();
-        }
-        let mut future = CompletableFuture::new();
-        IMAGE_CACHE.get_mut().insert(id.clone(), future.clone());
-        let mut factory: compat::Shared<dyn ImageRendererFactory> = (factory_supplier)();
-        // TODO(fabric2seer): `.submit(..)` on a ExecutorService
-        //   java: SINGLE_THREAD_EXECUTOR.submit(() -> {
-        //   java:             Supplier<Optional<ImageRendererFactory.ImageSupplier>> supplier =
-        //   java:                     factory.requiresOffThreadPreparation()
-        //   java:                             ? new CompletedSupplier<>(safelyPrepareFactory(id, factory))
-        //   java:                             : () -> safelyPrepareFactory(id, factory);
-        //   java:
-        //   java:             Minecraft.getInstance().execute(() -> completeImageFactory(id, supplier, future));
-        //   java:         });
-        return future.clone();
-    }
 
-    /// java: @Deprecated public static <T extends ImageRenderer> CompletableFuture<T> registerImage(Identifier id, ImageRendererFactory factory)
-    pub fn register_image(id: &Identifier, factory: &compat::Shared<dyn ImageRendererFactory>) -> mcrust::java::util::concurrent::completable_future::CompletableFuture<compat::Shared<dyn ImageRenderer>> {
-        return ImageRendererManager::register_or_get_image(id.clone(), Arc::new(move || factory.clone()));
-    }
-
-    /// java: private static <T extends ImageRenderer> void completeImageFactory(Identifier id, Supplier<Optional<ImageRendererFactory.ImageSupplier>> supplier, CompletableFuture<ImageRenderer> future)
-    pub fn complete_image_factory(id: &Identifier, supplier: Arc<dyn Fn() -> Option<ImageSupplier>>, future: &mcrust::java::util::concurrent::completable_future::CompletableFuture<compat::Shared<dyn ImageRenderer>>) {
-        render_system::assert_on_render_thread();
-        let Some(mut completable_image) = (supplier)() else {
-            return;
-        };
-        if future.is_done() {
-            logger().error(&format!("Image '{}' was already completed", compat::jstring(&id)));
-            return;
+        if let Some(future) = IMAGE_CACHE.with(|cache| cache.borrow().get(id).cloned()) {
+            return future;
         }
-        let mut image: compat::Shared<dyn ImageRenderer>;
-        // java: try {..} catch (Exception e) - an exception here is a panic, caught by `catch_unwind`
-        let __result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            image = (completable_image)();
+
+        let future = compat::LocalFuture::new();
+        IMAGE_CACHE.with(|cache| cache.borrow_mut().insert(id.clone(), future.clone()));
+
+        let factory: Box<dyn ImageRendererFactory> = factory_supplier();
+        let id = id.clone();
+        submit(Box::new(move || {
+            let prepared = if factory.requires_off_thread_preparation() {
+                Prepared::Prepared(Self::safely_prepare_factory(&id, &*factory))
+            } else {
+                Prepared::OnThread(factory)
+            };
+            COMPLETIONS.lock().unwrap_or_else(|p| p.into_inner()).push((id, prepared));
+            // Minecraft.getInstance().execute(() -> completeImageFactory(id, supplier, future));
+            mcrust::mcrust::modding::game::execute(Self::drain_completions);
         }));
-        if let Err(e) = __result {
-            logger().error(&format!("Failed to create image '{}'", compat::jstring(&id)));
+
+        future
+    }
+
+    /// java: @Deprecated public static <T extends ImageRenderer> CompletableFuture<T> registerImage(Identifier id,
+    /// ImageRendererFactory factory)
+    pub fn register_image(id: &Identifier, factory: Box<dyn ImageRendererFactory>) -> compat::LocalFuture<Arc<dyn ImageRenderer>> {
+        Self::register_or_get_image(id, move || factory)
+    }
+
+    /// The `Minecraft.execute` task: every completion the image thread queued.
+    fn drain_completions() {
+        let completions = std::mem::take(&mut *COMPLETIONS.lock().unwrap_or_else(|p| p.into_inner()));
+        for (id, prepared) in completions {
+            let supplier = match prepared {
+                Prepared::Prepared(supplier) => supplier,
+                Prepared::OnThread(factory) => Self::safely_prepare_factory(&id, &*factory),
+            };
+            match supplier {
+                // safelyPrepareFactory's failure: `IMAGE_CACHE.remove(id)`
+                None => {
+                    IMAGE_CACHE.with(|cache| cache.borrow_mut().remove(&id));
+                }
+                Some(supplier) => {
+                    // closed (closeAll) before it completed: nothing waits for it
+                    let Some(future) = IMAGE_CACHE.with(|cache| cache.borrow().get(&id).cloned()) else {
+                        continue;
+                    };
+                    Self::complete_image_factory(&id, supplier, &future);
+                }
+            }
+        }
+    }
+
+    /// java: private static <T extends ImageRenderer> void completeImageFactory(Identifier id,
+    /// Supplier<Optional<ImageRendererFactory.ImageSupplier>> supplier, CompletableFuture<ImageRenderer> future)
+    fn complete_image_factory(id: &Identifier, completable_image: Box<dyn ImageSupplier>, future: &compat::LocalFuture<Arc<dyn ImageRenderer>>) {
+        // RenderSystem.assertOnRenderThread(); - a `Minecraft.execute` task
+        // sanity check - this should never happen
+        if future.is_done() {
+            LOGGER.error(&format!("Image '{id}' was already completed"));
             return;
         }
-        future.complete(image.clone());
+
+        match completable_image.complete_image() {
+            Ok(image) => {
+                future.complete(image);
+            }
+            Err(e) => LOGGER.error(&format!("Failed to create image '{id}': {e}")),
+        }
     }
 
     /// java: public static void closeAll()
     pub fn close_all() {
-        // TODO(fabric2seer): `.shutdownNow(..)` on a ExecutorService
-        //   java: SINGLE_THREAD_EXECUTOR.shutdownNow();
-        IMAGE_CACHE.get_mut().retain(|_, __v| !(|future| {
+        *SINGLE_THREAD_EXECUTOR.lock().unwrap_or_else(|p| p.into_inner()) = Some(None);
+        let futures: Vec<_> = IMAGE_CACHE.with(|cache| cache.borrow_mut().drain().map(|(_, future)| future).collect());
+        for future in futures {
             if future.is_done() {
-                // TODO(fabric2seer): `.close(..)` on a T
-                //   java: future.join().close();
-            }
-            return true;
-        })(__v));
-    }
-
-    /// java: static Optional<ImageRendererFactory.ImageSupplier> safelyPrepareFactory(Identifier id, ImageRendererFactory factory)
-    pub fn safely_prepare_factory(id: &Identifier, factory: &compat::Shared<dyn ImageRendererFactory>) -> Option<ImageSupplier> {
-        // java: try {..} catch (Exception e) - an exception here is a panic, caught by `catch_unwind`; the body's `return` is the closure's value
-        match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
-            return Some(({ let __f = compat::dispatch(factory, |__t| __t.prepare_image()); __f(factory) }));
-        })) {
-            Ok(__v) => return __v,
-            Err(e) => {
-                logger().error(&format!("Failed to prepare image '{}'", compat::jstring(&id)));
-                IMAGE_CACHE.get_mut().remove(id);
-                return None;
+                future.join().close();
             }
         }
     }
 
-}
-
-/// java: public record PreloadedImageFactory(Predicate<Identifier> predicate, Function<Identifier, ImageRendererFactory> factory)
-#[derive(Clone, Debug)]
-pub struct PreloadedImageFactory {
-    /// java: Predicate<Identifier> predicate
-    pub predicate: Arc<dyn Fn(Identifier) -> bool>,
-    /// java: Function<Identifier, ImageRendererFactory> factory
-    pub factory: Arc<dyn Fn(Identifier) -> compat::Shared<dyn ImageRendererFactory>>,
-}
-
-impl PreloadedImageFactory {
-    /// java: the canonical record constructor
-    pub fn new(mut predicate: Arc<dyn Fn(Identifier) -> bool>, mut factory: Arc<dyn Fn(Identifier) -> compat::Shared<dyn ImageRendererFactory>>) -> Self {
-        Self { predicate, factory }
+    /// java: static Optional<ImageRendererFactory.ImageSupplier> safelyPrepareFactory(Identifier id,
+    /// ImageRendererFactory factory)
+    ///
+    /// The failure's `IMAGE_CACHE.remove(id)` is made by the render thread when it receives the empty result (the
+    /// cache is a render-thread map).
+    pub(crate) fn safely_prepare_factory(id: &Identifier, factory: &dyn ImageRendererFactory) -> Option<Box<dyn ImageSupplier>> {
+        match factory.prepare_image() {
+            Ok(supplier) => Some(supplier),
+            Err(e) => {
+                LOGGER.error(&format!("Failed to prepare image '{id}': {e}"));
+                None
+            }
+        }
     }
-
-    /// java: the record accessor `predicate()`
-    pub fn predicate(&self) -> Arc<dyn Fn(Identifier) -> bool> {
-        self.predicate.clone()
-    }
-
-    /// java: the record accessor `factory()`
-    pub fn factory(&self) -> Arc<dyn Fn(Identifier) -> compat::Shared<dyn ImageRendererFactory>> {
-        self.factory.clone()
-    }
-
-}
-
-/// java: private record CompletedSupplier<T>(T get) implements Supplier<T>
-#[derive(Clone, Debug)]
-pub struct CompletedSupplier<T> {
-    /// java: T get
-    pub get: T,
-}
-
-impl<T: Clone + 'static> CompletedSupplier<T> {
-    /// java: the canonical record constructor
-    pub fn new(mut get: T) -> Self {
-        Self { get }
-    }
-
-    /// java: the record accessor `get()`
-    pub fn get(&self) -> T {
-        self.get.clone()
-    }
-
 }

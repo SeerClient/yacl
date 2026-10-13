@@ -1,4 +1,4 @@
-//! Ported from dev.isxander.yacl3.gui.controllers.cycling.ICyclingController by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.controllers.cycling.ICyclingController.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
@@ -9,21 +9,26 @@ use crate::dev::isxander::yacl3::gui::controllers::cycling::cycling_controller_e
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
 
 /// java: public interface ICyclingController<T> extends Controller<T>
-pub trait ICyclingController<T: Clone + 'static>: Controller {
-    /// java: void setPendingValue(int ordinal);
+///
+/// This interface simply generifies setting and getting of the pending value, using an ordinal so elements can cycle
+/// through without knowing the content. Its `Controller` default (`provideWidget`) is the function below; an
+/// implementation's `Controller` impl calls it.
+pub trait ICyclingController<T: Clone + 'static>: Controller<T> {
+    /// java: void setPendingValue(int ordinal); - sets the pending value to whatever corresponds to the ordinal
     fn set_pending_value(&self, ordinal: i32);
 
-    /// java: int getPendingValue();
+    /// java: int getPendingValue(); - gets the pending ordinal that corresponds to the actual value
     fn get_pending_value(&self) -> i32;
 
-    /// java: int getCycleLength();
+    /// java: int getCycleLength(); - allows the element when it should wrap-around back to zeroth ordinal
     fn get_cycle_length(&self) -> i32;
+}
 
-    /// java: @Override default AbstractWidget provideWidget(YACLScreen screen, Dimension<Integer> widgetDimension)
-    fn provide_widget(&self, screen: &compat::Shared<YACLScreen>, widget_dimension: &compat::Shared<dyn Dimension<i32>>) -> compat::Shared<dyn AbstractWidget> {
-        // TODO(fabric2seer): `this` handed on as a reference other objects keep: the object has no shared handle to itself (port by hand)
-        //   java: return new CyclingControllerElement(this, screen, widgetDimension);
-        todo!("fabric2seer: the value of this function is in a TODO above")
-    }
-
+/// java: @Override default AbstractWidget provideWidget(YACLScreen screen, Dimension<Integer> widgetDimension)
+pub fn provide_widget<T: Clone + 'static, C: ICyclingController<T> + ?Sized + 'static>(
+    this: Arc<C>,
+    screen: &Arc<YACLScreen>,
+    widget_dimension: Arc<dyn Dimension<i32>>,
+) -> Arc<dyn AbstractWidget> {
+    Arc::new(CyclingControllerElement::new(this, screen, widget_dimension))
 }

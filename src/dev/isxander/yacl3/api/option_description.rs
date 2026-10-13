@@ -11,7 +11,7 @@ use mcrust::net::minecraft::resources::identifier::Identifier;
 pub type ImageFuture = compat::LocalFuture<Option<Arc<dyn ImageRenderer>>>;
 
 thread_local! {
-    static EMPTY: Arc<dyn OptionDescription> = Arc::new(OptionDescriptionImpl::new(
+    static EMPTY_CELL: Arc<dyn OptionDescription> = Arc::new(OptionDescriptionImpl::new(
         // CommonComponents.EMPTY = Component.empty()
         mcrust::net::minecraft::network::chat::component::empty(),
         compat::LocalFuture::completed_future(None),
@@ -22,7 +22,7 @@ thread_local! {
 /// One object (it is compared by identity where a hovered description is remembered).
 #[allow(non_snake_case)]
 pub fn EMPTY() -> Arc<dyn OptionDescription> {
-    EMPTY.with(|d| d.clone())
+    EMPTY_CELL.with(|d| d.clone())
 }
 
 /// java: public interface OptionDescription

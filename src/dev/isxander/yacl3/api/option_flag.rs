@@ -22,16 +22,16 @@ impl<F: Fn(&mut Minecraft)> OptionFlag for F {
 }
 
 thread_local! {
-    static GAME_RESTART: Arc<dyn OptionFlag> = Arc::new(|_client: &mut Minecraft| {
+    static GAME_RESTART_CELL: Arc<dyn OptionFlag> = Arc::new(|_client: &mut Minecraft| {
         GuiUtils::set_screen_1(compat::ScreenRef::new_keeping_parent(RequireRestartScreen::new(GuiUtils::get_current_screen())));
     });
-    static RELOAD_CHUNKS: Arc<dyn OptionFlag> = Arc::new(|client: &mut Minecraft| {
+    static RELOAD_CHUNKS_CELL: Arc<dyn OptionFlag> = Arc::new(|client: &mut Minecraft| {
         // java: client.levelExtractor.allChanged() - the port's LevelExtractor.allChanged is GameRenderer.all_changed,
         // handed the level (`LevelExtractor.allChanged:410-411` reads it).
         let level = mcrust::mcrust::modding::game::level();
         client.game_renderer.all_changed(level.as_deref());
     });
-    static ASSET_RELOAD: Arc<dyn OptionFlag> = Arc::new(|client: &mut Minecraft| {
+    static ASSET_RELOAD_CELL: Arc<dyn OptionFlag> = Arc::new(|client: &mut Minecraft| {
         // java: Minecraft::delayTextureReload - `this.pendingReload = ..`, which the loop's `runTick` drains.
         client.pending_reload = true;
     });
@@ -40,13 +40,13 @@ thread_local! {
 /// java: OptionFlag GAME_RESTART = client -> GuiUtils.setScreen(new RequireRestartScreen(GuiUtils.getCurrentScreen()));
 #[allow(non_snake_case)]
 pub fn GAME_RESTART() -> Arc<dyn OptionFlag> {
-    GAME_RESTART.with(|f| f.clone())
+    GAME_RESTART_CELL.with(|f| f.clone())
 }
 
 /// java: OptionFlag RELOAD_CHUNKS = client -> client.levelExtractor.allChanged();
 #[allow(non_snake_case)]
 pub fn RELOAD_CHUNKS() -> Arc<dyn OptionFlag> {
-    RELOAD_CHUNKS.with(|f| f.clone())
+    RELOAD_CHUNKS_CELL.with(|f| f.clone())
 }
 
 /// java: @Deprecated OptionFlag WORLD_RENDER_UPDATE = RELOAD_CHUNKS;
@@ -58,7 +58,7 @@ pub fn WORLD_RENDER_UPDATE() -> Arc<dyn OptionFlag> {
 /// java: OptionFlag ASSET_RELOAD = Minecraft::delayTextureReload;
 #[allow(non_snake_case)]
 pub fn ASSET_RELOAD() -> Arc<dyn OptionFlag> {
-    ASSET_RELOAD.with(|f| f.clone())
+    ASSET_RELOAD_CELL.with(|f| f.clone())
 }
 
 /// `set.add(flag)` on Java's `HashSet<OptionFlag>` / `ImmutableSet.copyOf(..)`: a flag object is added once.

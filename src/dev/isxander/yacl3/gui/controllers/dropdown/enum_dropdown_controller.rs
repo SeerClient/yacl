@@ -1,140 +1,108 @@
-//! Ported from dev.isxander.yacl3.gui.controllers.dropdown.EnumDropdownController by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.controllers.dropdown.EnumDropdownController.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::controller::Controller;
 use crate::dev::isxander::yacl3::api::controller::value_formatter::ValueFormatter;
+use crate::dev::isxander::yacl3::api::option::Option as YOption;
 use crate::dev::isxander::yacl3::api::utils::dimension::Dimension;
 use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget;
-use crate::dev::isxander::yacl3::gui::controllers::dropdown::abstract_dropdown_controller::AbstractDropdownController;
-use crate::dev::isxander::yacl3::gui::controllers::dropdown::abstract_dropdown_controller::AbstractDropdownControllerBase;
+use crate::dev::isxander::yacl3::gui::controllers::dropdown::abstract_dropdown_controller::{
+    self as dropdown_controller, AbstractDropdownController, AbstractDropdownControllerBase,
+};
 use crate::dev::isxander::yacl3::gui::controllers::dropdown::enum_dropdown_controller_element::EnumDropdownControllerElement;
-use crate::dev::isxander::yacl3::gui::controllers::string::i_string_controller::IStringController;
+use crate::dev::isxander::yacl3::gui::controllers::string::i_string_controller::{self, IStringController};
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
-use mcrust::net::minecraft::network::chat::component;
-use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
-use crate::dev::isxander::yacl3::api::option::Option as _;
 use mcrust::net::minecraft::network::chat::component::Component as _;
+use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
 
 /// java: public class EnumDropdownController<E extends Enum<E>> extends AbstractDropdownController<E>
-#[derive(Clone)]
-pub struct EnumDropdownController<E> {
-    /// java: extends AbstractDropdownController
+pub struct EnumDropdownController<E: compat::JavaEnum> {
+    /// java: extends AbstractDropdownController<E>
     pub base: AbstractDropdownControllerBase<E>,
     /// java: protected final ValueFormatter<E> formatter;
-    pub formatter: compat::Shared<dyn ValueFormatter<E>>,
-    /// the object's own shared handle: Java's `this` handed to other objects
-    pub self_ref: compat::WeakShared<Self>,
+    pub formatter: Arc<dyn ValueFormatter<E>>,
 }
 
-impl<E: 'static> std::ops::Deref for EnumDropdownController<E> {
-    type Target = AbstractDropdownControllerBase<E>;
-    fn deref(&self) -> &Self::Target {
-        &self.base
-    }
-}
-
-impl<E: 'static> std::ops::DerefMut for EnumDropdownController<E> {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
-    }
-}
-
-impl<E: Clone + 'static> EnumDropdownController<E> {
+impl<E: compat::JavaEnum> EnumDropdownController<E> {
     /// java: public EnumDropdownController(Option<E> option, ValueFormatter<E> formatter)
-    pub fn new(mut option: compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<E>>, mut formatter: compat::Shared<dyn ValueFormatter<E>>) -> compat::Shared<Self> {
-        let __init_formatter = formatter.clone();
-        // TODO(fabric2seer): `.getDeclaringClass(..)` on a T
-        //   java: super(option, Arrays.stream(option.pendingValue().getDeclaringClass().getEnumConstants()).map(formatter::format).map(Component::getString).toList());
-        let __this: compat::Shared<Self> = todo!("constructor");
-        __this
+    pub fn new(option: Arc<dyn YOption<E>>, formatter: Arc<dyn ValueFormatter<E>>) -> Arc<Self> {
+        // option.pendingValue().getDeclaringClass().getEnumConstants(), each `formatter.format(..).getString()`
+        let allowed_values = E::enum_constants().into_iter().map(|constant| formatter.format(constant).get_string()).collect();
+        Arc::new(Self { base: AbstractDropdownControllerBase::new_2(option, allowed_values), formatter })
     }
 
     /// java: private E getEnumFromString(String value)
-    pub fn get_enum_from_string(__this: &compat::Shared<Self>, mut value: String) -> E {
-        value = value.to_lowercase();
-        // TODO(fabric2seer): `.getDeclaringClass(..)` on a T
-        //   java: for (E constant : option().pendingValue().getDeclaringClass().getEnumConstants()) {
-        //   java:             if (formatter.format(constant).getString().toLowerCase().equals(value)) return constant;
-        //   java:         }
-        return __this.lock().borrow().option().lock().borrow().pending_value();
+    fn get_enum_from_string(&self, value: &str) -> E {
+        let value = value.to_lowercase();
+        for constant in E::enum_constants() {
+            if self.formatter.format(constant.clone()).get_string().to_lowercase() == value {
+                return constant;
+            }
+        }
+        self.base.option.pending_value()
     }
 
     /// java: @NotNull protected Stream<String> getValidEnumConstants(String value)
-    pub fn get_valid_enum_constants(__this: &compat::Shared<Self>, value: &str) -> Box<dyn Iterator<Item = String> + '_> {
-        let mut value_lower_case: String = value.to_lowercase();
-        return Box::new(compat::sorted_by(__this.lock().borrow().get_allowed_values().into_iter().filter(|constant| constant.to_lowercase().contains(&value_lower_case)), |s1, s2| {
-            let mut s1_lower_case: String = s1.to_lowercase();
-            let mut s2_lower_case: String = s2.to_lowercase();
-            if s1_lower_case.starts_with(&value_lower_case) && !(s2_lower_case.starts_with(&value_lower_case)) {
-                return -1;
-            }
-            if !(s1_lower_case.starts_with(&value_lower_case)) && s2_lower_case.starts_with(&value_lower_case) {
-                return 1;
-            }
-            return compat::compare_to(&s1, s2);
-        }));
+    pub fn get_valid_enum_constants(&self, value: &str) -> Vec<String> {
+        let value_lower_case = value.to_lowercase();
+        let mut values: Vec<String> = self
+            .get_allowed_values()
+            .into_iter()
+            .filter(|constant| constant.to_lowercase().contains(&value_lower_case))
+            .collect();
+        values.sort_by(|s1, s2| dropdown_controller::compare_by_prefix(s1, s2, &value_lower_case));
+        values
     }
-
 }
 
-impl<E: Clone + 'static> AbstractDropdownController<E> for EnumDropdownController<E> {
-    fn abstract_dropdown_controller_base(&self) -> &AbstractDropdownControllerBase<E> {
-        &self.base
+impl<E: compat::JavaEnum> Controller<E> for EnumDropdownController<E> {
+    /// java: AbstractDropdownController.option()
+    fn option(&self) -> Arc<dyn YOption<E>> {
+        self.base.option.clone()
     }
-    fn abstract_dropdown_controller_base_mut(&mut self) -> &mut AbstractDropdownControllerBase<E> {
-        &mut self.base
+
+    /// java: IStringController.formatValue() (the interface default)
+    fn format_value(&self) -> MutableComponent {
+        i_string_controller::format_value::<E, Self>(self)
+    }
+
+    /// java: @Override public AbstractWidget provideWidget(YACLScreen screen, Dimension<Integer> widgetDimension)
+    fn provide_widget(self: Arc<Self>, screen: &Arc<YACLScreen>, widget_dimension: Arc<dyn Dimension<i32>>) -> Arc<dyn AbstractWidget> {
+        EnumDropdownControllerElement::new(self, screen, widget_dimension)
+    }
+}
+
+impl<E: compat::JavaEnum> IStringController<E> for EnumDropdownController<E> {
+    /// java: @Override public String getString()
+    fn get_string(&self) -> String {
+        self.formatter.format(self.base.option.pending_value()).get_string()
+    }
+
+    /// java: @Override public void setFromString(String value)
+    fn set_from_string(&self, value: &str) {
+        self.base.option.request_set(self.get_enum_from_string(value));
+    }
+}
+
+impl<E: compat::JavaEnum> AbstractDropdownController<E> for EnumDropdownController<E> {
+    fn dropdown_controller(&self) -> &AbstractDropdownControllerBase<E> {
+        &self.base
     }
 
     /// java: @Override public boolean isValueValid(String value)
-    fn is_value_valid(&self, mut value: String) -> bool {
-        value = value.to_lowercase();
+    fn is_value_valid(&self, value: &str) -> bool {
+        let value = value.to_lowercase();
         for constant in self.get_allowed_values() {
             if constant == value {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     /// java: @Override protected String getValidValue(String value, int offset)
-    fn get_valid_value_2(&self, value: &str, mut offset: i32) -> String {
-        return EnumDropdownController::get_valid_enum_constants(&self.self_ref.upgrade().unwrap(), value).skip((offset) as usize).next().unwrap_or_else(|| self.get_string());
+    fn get_valid_value_2(&self, value: &str, offset: i32) -> String {
+        self.get_valid_enum_constants(value).into_iter().nth(offset.max(0) as usize).unwrap_or_else(|| self.get_string())
     }
-
-}
-
-impl<E: Clone + 'static> IStringController<compat::Object> for EnumDropdownController<E> {
-    /// java: @Override public String getString()
-    fn get_string(&self) -> String {
-        return ({ let (__a0,) = (&self.option().lock().borrow().pending_value(),); self.formatter.lock().borrow().format(__a0) }).get_string();
-    }
-
-    /// java: @Override public void setFromString(String value)
-    fn set_from_string(&self, mut value: String) {
-        { let __s0 = EnumDropdownController::get_enum_from_string(&self.self_ref.upgrade().unwrap(), value.clone()); self.option().lock().borrow_mut().request_set(__s0) };
-    }
-
-}
-
-impl<E: Clone + 'static> Controller<compat::Object> for EnumDropdownController<E> {
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
-    }
-
-    /// java: @Override public AbstractWidget provideWidget(YACLScreen screen, Dimension<Integer> widgetDimension)
-    fn provide_widget(&self, screen: &compat::Shared<YACLScreen>, widget_dimension: &compat::Shared<dyn Dimension<i32>>) -> compat::Shared<dyn AbstractWidget> {
-        return (EnumDropdownControllerElement::new(self.self_ref.upgrade().unwrap(), screen.clone(), widget_dimension.clone()) as compat::Shared<dyn AbstractWidget>);
-    }
-
-    /// java: @Override public Option<T> option()
-    fn option(&self) -> compat::Shared<dyn crate::dev::isxander::yacl3::api::option::Option<T>> {
-        return self.option.clone().unwrap();
-    }
-
-    /// java: @Override default Component formatValue()
-    fn format_value(&self) -> MutableComponent {
-        return component::literal(&self.get_string());
-    }
-
 }

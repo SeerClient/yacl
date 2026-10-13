@@ -111,7 +111,7 @@ impl ControllerWidgetBase {
 }
 
 /// java: the overridable methods of `ControllerWidget` and of the `AbstractWidget` / `GuiEventListener` under it.
-pub trait ControllerWidget: compat::DynAny {
+pub trait ControllerWidget {
     /// The class's fields.
     fn controller_widget(&self) -> &ControllerWidgetBase;
 
@@ -391,7 +391,7 @@ mod dispatch {
     use mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent;
     use std::sync::Arc;
 
-    impl<W: ControllerWidget + ?Sized> compat::GuiEventListener for W {
+    impl<W: ControllerWidget + compat::DynAny + ?Sized> compat::GuiEventListener for W {
         fn extract_render_state(&self, graphics: &compat::Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
             ControllerWidget::extract_render_state(self, graphics, mouse_x, mouse_y, a)
         }
@@ -430,7 +430,7 @@ mod dispatch {
         }
     }
 
-    impl<W: ControllerWidget + ?Sized> crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget for W {
+    impl<W: ControllerWidget + compat::DynAny + ?Sized> crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget for W {
         fn can_reset(&self) -> bool {
             ControllerWidget::can_reset(self)
         }

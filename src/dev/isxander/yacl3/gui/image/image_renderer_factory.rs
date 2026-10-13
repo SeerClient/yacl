@@ -1,47 +1,54 @@
-//! Ported from dev.isxander.yacl3.gui.image.ImageRendererFactory by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.image.ImageRendererFactory.
+//!
+//! A factory is prepared on YACL's image thread (`requiresOffThreadPreparation`), so it and the supplier it prepares
+//! are `Send`; the supplier's `completeImage` runs on the render thread and builds the (non-`Send`) renderer.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::gui::image::image_renderer::ImageRenderer;
 
 /// java: public interface ImageRendererFactory
-pub trait ImageRendererFactory: compat::DynAny {
-    fn as_any(&self) -> &dyn std::any::Any;
-    /// java: ImageSupplier prepareImage() throws Exception; (dispatch: the body for this class)
-    fn prepare_image(&self) -> fn(&compat::Shared<dyn ImageRendererFactory>) -> ImageSupplier;
+pub trait ImageRendererFactory: Send {
+    /// java: ImageSupplier prepareImage() throws Exception; - prepares the image. This can be run off-thread, and
+    /// should NOT contain any GL calls whatsoever.
+    fn prepare_image(&self) -> Result<Box<dyn ImageSupplier>, String>;
 
-    /// java: default boolean requiresOffThreadPreparation() (dispatch: the body for this class)
-    fn requires_off_thread_preparation(&self) -> fn(&compat::Shared<dyn ImageRendererFactory>) -> bool {
-        <dyn ImageRendererFactory>::requires_off_thread_preparation_body
-    }
-
-}
-
-impl dyn ImageRendererFactory {
     /// java: default boolean requiresOffThreadPreparation()
-    pub fn requires_off_thread_preparation_body(__this: &compat::Shared<dyn ImageRendererFactory>) -> bool {
-        return true;
+    fn requires_off_thread_preparation(&self) -> bool {
+        true
     }
-
 }
 
-/// java: interface ImageSupplier
-/// a functional interface: `completeImage()` - a lambda / method reference is this closure type
-pub type ImageSupplier = Arc<dyn Fn() -> compat::Shared<dyn ImageRenderer>>;
-
-/// java: interface OnThread extends ImageRendererFactory
-pub trait OnThread: ImageRendererFactory {
+/// java: interface ImageSupplier - `ImageRenderer completeImage() throws Exception;`
+pub trait ImageSupplier: Send {
+    /// java: ImageRenderer completeImage() throws Exception;
+    fn complete_image(self: Box<Self>) -> Result<Arc<dyn ImageRenderer>, String>;
 }
 
-impl dyn OnThread {
-    /// java: @Override default boolean requiresOffThreadPreparation()
-    pub fn requires_off_thread_preparation_body(__this: &compat::Shared<dyn OnThread>) -> bool {
-        return false;
+impl<F: FnOnce() -> Result<Arc<dyn ImageRenderer>, String> + Send> ImageSupplier for F {
+    fn complete_image(self: Box<Self>) -> Result<Arc<dyn ImageRenderer>, String> {
+        (*self)()
+    }
+}
+
+/// A factory written as a lambda (`() -> supplier`), prepared off-thread.
+pub struct FnFactory<F: Fn() -> Result<Box<dyn ImageSupplier>, String> + Send>(pub F);
+
+impl<F: Fn() -> Result<Box<dyn ImageSupplier>, String> + Send> ImageRendererFactory for FnFactory<F> {
+    fn prepare_image(&self) -> Result<Box<dyn ImageSupplier>, String> {
+        (self.0)()
+    }
+}
+
+/// java: interface OnThread extends ImageRendererFactory - `requiresOffThreadPreparation()` is `false`.
+pub struct OnThread<F: Fn() -> Result<Box<dyn ImageSupplier>, String> + Send>(pub F);
+
+impl<F: Fn() -> Result<Box<dyn ImageSupplier>, String> + Send> ImageRendererFactory for OnThread<F> {
+    fn prepare_image(&self) -> Result<Box<dyn ImageSupplier>, String> {
+        (self.0)()
     }
 
-    /// OnThread.requiresOffThreadPreparation as the dispatch of ImageRendererFactory.requiresOffThreadPreparation for the concrete class `__C`
-    pub fn requires_off_thread_preparation_from<__C: OnThread + 'static>(__this: &compat::Shared<dyn ImageRendererFactory>) -> bool {
-        <dyn OnThread>::requires_off_thread_preparation_body(&compat::view_as::<__C, _, _>(__this, |a| a as compat::Shared<dyn OnThread>))
+    fn requires_off_thread_preparation(&self) -> bool {
+        false
     }
-
 }

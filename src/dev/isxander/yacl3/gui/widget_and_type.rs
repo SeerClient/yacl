@@ -1,33 +1,37 @@
-//! Ported from dev.isxander.yacl3.gui.WidgetAndType by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.WidgetAndType.
+//!
+//! `getWidget()` answers the game's `AbstractWidget`; the YACL screen's widgets are its own `GuiEventListener`s
+//! (PATTERNS_Y2.md P3), so the widget half is that.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
-use mcrust::net::minecraft::client::gui::components::abstract_widget::AbstractWidget;
+use compat::GuiEventListener;
 
 /// java: public interface WidgetAndType<T>
-pub trait WidgetAndType<T: Clone + 'static> {
-    fn as_any(&self) -> &dyn std::any::Any;
+pub trait WidgetAndType<T: ?Sized> {
     /// java: T getType();
-    fn get_type(&self) -> T;
+    fn get_type(&self) -> Arc<T>;
 
     /// java: AbstractWidget getWidget();
-    fn get_widget(&self) -> AbstractWidget;
+    fn get_widget(&self) -> Arc<dyn GuiEventListener>;
+}
 
+/// java: static <T extends AbstractWidget> WidgetAndType<T> ofWidget(T widget) - the anonymous class over `widget`
+struct OfWidget<T: GuiEventListener + 'static> {
+    widget: Arc<T>,
+}
+
+impl<T: GuiEventListener + 'static> WidgetAndType<T> for OfWidget<T> {
+    fn get_type(&self) -> Arc<T> {
+        self.widget.clone()
+    }
+
+    fn get_widget(&self) -> Arc<dyn GuiEventListener> {
+        self.widget.clone()
+    }
 }
 
 /// java: static <T extends AbstractWidget> WidgetAndType<T> ofWidget(T widget)
-pub fn of_widget<T: 'static>(widget: &T) -> compat::Shared<dyn WidgetAndType<T>> {
-    // TODO(fabric2seer): `new WidgetAndType(..) {..}` (an anonymous class with state or several methods)
-    //   java: return new WidgetAndType<>() {
-    //   java:             @Override
-    //   java:             public T getType() {
-    //   java:                 return widget;
-    //   java:             }
-    //   java:
-    //   java:             @Override
-    //   java:             public AbstractWidget getWidget() {
-    //   java:                 return widget;
-    //   java:             }
-    //   java:         };
-    todo!("fabric2seer: the value of this function is in a TODO above")
+pub fn of_widget<T: GuiEventListener + 'static>(widget: Arc<T>) -> Arc<dyn WidgetAndType<T>> {
+    Arc::new(OfWidget { widget })
 }

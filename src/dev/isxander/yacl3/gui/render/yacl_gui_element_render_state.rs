@@ -1,4 +1,8 @@
-//! Ported from dev.isxander.yacl3.gui.render.YACLGuiElementRenderState by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.render.YACLGuiElementRenderState.
+//!
+//! `interface YACLGuiElementRenderState extends GuiElementRenderState`: its defaults are this trait's; the port's
+//! `GuiElementRenderState` (and its `ScreenArea` supertrait) is implemented for each implementor by
+//! `impl_gui_element_render_state!`, since a blanket impl of a foreign trait over a local one is not allowed.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
@@ -9,87 +13,94 @@ use mcrust::com::mojang::blaze3d::vertex::vertex_consumer::VertexConsumer;
 use mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor;
 use mcrust::net::minecraft::client::gui::navigation::screen_rectangle::ScreenRectangle;
 use mcrust::net::minecraft::client::gui::render::texture_setup::TextureSetup;
+use mcrust::net::minecraft::client::renderer::state::gui::gui_element_render_state::GuiElementRenderState;
 
 /// java: public interface YACLGuiElementRenderState extends GuiElementRenderState
-pub trait YACLGuiElementRenderState: compat::DynAny {
-    fn as_any(&self) -> &dyn std::any::Any;
-    /// java: BaseRenderState baseState(); (dispatch: the body for this class)
-    fn base_state(&self) -> fn(&compat::Shared<dyn YACLGuiElementRenderState>) -> BaseRenderState;
+pub trait YACLGuiElementRenderState: 'static {
+    /// java: BaseRenderState baseState();
+    fn base_state(&self) -> &BaseRenderState;
 
-    /// java: @Override default void buildVertices(VertexConsumer vertexConsumer) (dispatch: the body for this class)
-    fn build_vertices(&self) -> fn(&compat::Shared<dyn YACLGuiElementRenderState>, &dyn VertexConsumer) {
-        <dyn YACLGuiElementRenderState>::build_vertices_body
-    }
-
-    /// java: void buildVertices(VertexConsumer vertexConsumer, float z); (dispatch: the body for this class)
-    fn build_vertices_2(&self) -> fn(&compat::Shared<dyn YACLGuiElementRenderState>, &dyn VertexConsumer, f32);
-
-    /// java: @Override default @NotNull RenderPipeline pipeline() (dispatch: the body for this class)
-    fn pipeline(&self) -> fn(&compat::Shared<dyn YACLGuiElementRenderState>) -> RenderPipeline {
-        <dyn YACLGuiElementRenderState>::pipeline_body
-    }
-
-    /// java: @Override default @NotNull TextureSetup textureSetup() (dispatch: the body for this class)
-    fn texture_setup(&self) -> fn(&compat::Shared<dyn YACLGuiElementRenderState>) -> TextureSetup {
-        <dyn YACLGuiElementRenderState>::texture_setup_body
-    }
-
-    /// java: @Override default @Nullable ScreenRectangle scissorArea() (dispatch: the body for this class)
-    fn scissor_area(&self) -> fn(&compat::Shared<dyn YACLGuiElementRenderState>) -> Option<ScreenRectangle> {
-        <dyn YACLGuiElementRenderState>::scissor_area_body
-    }
-
-    /// java: @Override default @Nullable ScreenRectangle bounds() (dispatch: the body for this class)
-    fn bounds(&self) -> fn(&compat::Shared<dyn YACLGuiElementRenderState>) -> Option<ScreenRectangle> {
-        <dyn YACLGuiElementRenderState>::bounds_body
-    }
-
-    /// java: default VertexConsumer add2DVertex( VertexConsumer vertexConsumer, float x, float y, float z ) (dispatch: the body for this class)
-    fn add2_d_vertex(&self) -> fn(&compat::Shared<dyn YACLGuiElementRenderState>, &dyn VertexConsumer, f32, f32, f32) -> Box<dyn VertexConsumer> {
-        <dyn YACLGuiElementRenderState>::add2_d_vertex_body
-    }
-
-    /// java: default void submit(GuiGraphicsExtractor graphics) (dispatch: the body for this class)
-    fn submit(&self) -> fn(&compat::Shared<dyn YACLGuiElementRenderState>, &GuiGraphicsExtractor) {
-        <dyn YACLGuiElementRenderState>::submit_body
-    }
-
-}
-
-impl dyn YACLGuiElementRenderState {
     /// java: @Override default void buildVertices(VertexConsumer vertexConsumer)
-    pub fn build_vertices_body(__this: &compat::Shared<dyn YACLGuiElementRenderState>, vertex_consumer: &dyn VertexConsumer) {
-        ({ let __f = compat::dispatch(__this, |__t| __t.build_vertices_2()); __f(__this, vertex_consumer, ((0) as f32) as f32) });
+    fn build_vertices(&self, vertex_consumer: &mut dyn VertexConsumer) {
+        self.build_vertices_2(vertex_consumer, 0.0);
     }
+
+    /// java: void buildVertices(VertexConsumer vertexConsumer, float z);
+    fn build_vertices_2(&self, vertex_consumer: &mut dyn VertexConsumer, z: f32);
 
     /// java: @Override default @NotNull RenderPipeline pipeline()
-    pub fn pipeline_body(__this: &compat::Shared<dyn YACLGuiElementRenderState>) -> RenderPipeline {
-        return ({ let __f = compat::dispatch(__this, |__t| __t.base_state()); __f(__this) }).pipeline();
+    fn pipeline(&self) -> Rc<RenderPipeline> {
+        self.base_state().pipeline()
     }
 
     /// java: @Override default @NotNull TextureSetup textureSetup()
-    pub fn texture_setup_body(__this: &compat::Shared<dyn YACLGuiElementRenderState>) -> TextureSetup {
-        return ({ let __f = compat::dispatch(__this, |__t| __t.base_state()); __f(__this) }).texture_setup();
+    fn texture_setup(&self) -> &TextureSetup {
+        self.base_state().texture_setup()
     }
 
     /// java: @Override default @Nullable ScreenRectangle scissorArea()
-    pub fn scissor_area_body(__this: &compat::Shared<dyn YACLGuiElementRenderState>) -> Option<ScreenRectangle> {
-        return ({ let __f = compat::dispatch(__this, |__t| __t.base_state()); __f(__this) }).scissor_area();
+    fn scissor_area(&self) -> Option<ScreenRectangle> {
+        self.base_state().scissor_area()
     }
 
     /// java: @Override default @Nullable ScreenRectangle bounds()
-    pub fn bounds_body(__this: &compat::Shared<dyn YACLGuiElementRenderState>) -> Option<ScreenRectangle> {
-        return ({ let __f = compat::dispatch(__this, |__t| __t.base_state()); __f(__this) }).bounds();
+    fn bounds(&self) -> Option<ScreenRectangle> {
+        self.base_state().bounds()
     }
 
-    /// java: default VertexConsumer add2DVertex( VertexConsumer vertexConsumer, float x, float y, float z )
-    pub fn add2_d_vertex_body(__this: &compat::Shared<dyn YACLGuiElementRenderState>, vertex_consumer: &dyn VertexConsumer, mut x: f32, mut y: f32, mut z: f32) -> Box<dyn VertexConsumer> {
-        return { vertex_consumer.add_vertex_with_2d_pose(&({ let __f = compat::dispatch(__this, |__t| __t.base_state()); __f(__this) }).pose(), x, y); &mut *vertex_consumer }.clone();
+    /// java: default VertexConsumer add2DVertex(VertexConsumer vertexConsumer, float x, float y, float z)
+    ///
+    /// Answers the consumer for the chained `.setColor(..)`, as Java's does.
+    fn add_2d_vertex<'v>(
+        &self,
+        vertex_consumer: &'v mut dyn VertexConsumer,
+        x: f32,
+        y: f32,
+        _z: f32,
+    ) -> &'v mut dyn VertexConsumer {
+        vertex_consumer.add_vertex_with_2d_pose(&self.base_state().pose(), x, y);
+        vertex_consumer
     }
 
     /// java: default void submit(GuiGraphicsExtractor graphics)
-    pub fn submit_body(__this: &compat::Shared<dyn YACLGuiElementRenderState>, graphics: &GuiGraphicsExtractor) {
-        gui_render_state_sink::submit(graphics, __this);
+    fn submit(self, graphics: &GuiGraphicsExtractor)
+    where
+        Self: Sized + GuiElementRenderState,
+    {
+        gui_render_state_sink::submit(graphics, Box::new(self));
     }
+}
 
+/// `implements YACLGuiElementRenderState` also implements the port's `GuiElementRenderState` with the interface's
+/// default bodies (`ScreenArea.bounds`, `buildVertices`, `pipeline`, `textureSetup`, `scissorArea`).
+#[macro_export]
+macro_rules! impl_gui_element_render_state {
+    ($ty:ty) => {
+        impl mcrust::net::minecraft::client::renderer::state::gui::screen_area::ScreenArea for $ty {
+            fn bounds(&self) -> Option<mcrust::net::minecraft::client::gui::navigation::screen_rectangle::ScreenRectangle> {
+                <$ty as $crate::dev::isxander::yacl3::gui::render::yacl_gui_element_render_state::YACLGuiElementRenderState>::bounds(self)
+            }
+        }
+        impl mcrust::net::minecraft::client::renderer::state::gui::gui_element_render_state::GuiElementRenderState for $ty {
+            fn build_vertices(&self, vertex_consumer: &mut dyn mcrust::com::mojang::blaze3d::vertex::vertex_consumer::VertexConsumer) {
+                <$ty as $crate::dev::isxander::yacl3::gui::render::yacl_gui_element_render_state::YACLGuiElementRenderState>::build_vertices(
+                    self,
+                    vertex_consumer,
+                )
+            }
+            fn pipeline(&self) -> std::rc::Rc<mcrust::com::mojang::blaze3d::pipeline::render_pipeline::RenderPipeline> {
+                <$ty as $crate::dev::isxander::yacl3::gui::render::yacl_gui_element_render_state::YACLGuiElementRenderState>::pipeline(self)
+            }
+            fn texture_setup(&self) -> &mcrust::net::minecraft::client::gui::render::texture_setup::TextureSetup {
+                <$ty as $crate::dev::isxander::yacl3::gui::render::yacl_gui_element_render_state::YACLGuiElementRenderState>::texture_setup(
+                    self,
+                )
+            }
+            fn scissor_area(&self) -> Option<mcrust::net::minecraft::client::gui::navigation::screen_rectangle::ScreenRectangle> {
+                <$ty as $crate::dev::isxander::yacl3::gui::render::yacl_gui_element_render_state::YACLGuiElementRenderState>::scissor_area(
+                    self,
+                )
+            }
+        }
+    };
 }

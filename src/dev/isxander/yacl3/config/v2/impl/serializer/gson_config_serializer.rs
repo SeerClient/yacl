@@ -319,12 +319,12 @@ impl ItemTypeAdapter {
     }
 
     /// java: @Override public Item deserialize(JsonElement jsonElement, Type type, JsonDeserializationContext jsonDeserializationContext)
-    pub fn deserialize(&self, json_element: &serde_json::Value) -> Arc<Item> {
+    pub fn deserialize(&self, json_element: &serde_json::Value) -> compat::JavaRef<Item> {
         ItemRegistryHelper::get_item_from_name_1(&compat::json::get_as_string(json_element))
     }
 
     /// java: @Override public JsonElement serialize(Item item, Type type, JsonSerializationContext jsonSerializationContext)
-    pub fn serialize(&self, item: &Arc<Item>) -> compat::GsonValue {
+    pub fn serialize(&self, item: &compat::JavaRef<Item>) -> compat::GsonValue {
         compat::GsonValue::str(
             &mcrust::net::minecraft::core::registries::built_in_registries::item().get_key_defaulted(&item.erased_obj()).to_string(),
         )

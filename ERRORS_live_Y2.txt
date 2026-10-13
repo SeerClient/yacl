@@ -1,0 +1,193 @@
+src/dev/isxander/yacl3/api/option_description.rs:13:1: error[E0428]: the name `EMPTY` is defined multiple times: `EMPTY` redefined here
+src/dev/isxander/yacl3/api/option_flag.rs:24:1: error[E0428]: the name `GAME_RESTART` is defined multiple times: `GAME_RESTART` redefined here
+src/dev/isxander/yacl3/api/option_flag.rs:24:1: error[E0428]: the name `RELOAD_CHUNKS` is defined multiple times: `RELOAD_CHUNKS` redefined here
+src/dev/isxander/yacl3/api/option_flag.rs:24:1: error[E0428]: the name `ASSET_RELOAD` is defined multiple times: `ASSET_RELOAD` redefined here
+src/dev/isxander/yacl3/gui/controllers/action_controller.rs:58:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/action_controller.rs:142:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/action_controller.rs:145:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/action_controller.rs:168:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/action_controller.rs:171:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/action_controller.rs:175:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/boolean_controller.rs:83:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/boolean_controller.rs:163:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/boolean_controller.rs:166:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/boolean_controller.rs:204:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/boolean_controller.rs:207:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/boolean_controller.rs:211:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/color_controller.rs:98:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/color_controller.rs:364:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/color_controller.rs:367:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/color_controller.rs:417:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/color_controller.rs:420:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/color_controller.rs:424:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/color_picker_widget.rs:450:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/color_picker_widget.rs:453:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/color_picker_widget.rs:524:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/color_picker_widget.rs:527:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/color_picker_widget.rs:531:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/color_picker_widget.rs:536:5: error[E0407]: method `is_mouse_over` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/cycling/cycling_controller_element.rs:103:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/cycling/cycling_controller_element.rs:106:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/cycling/cycling_controller_element.rs:129:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/cycling/cycling_controller_element.rs:132:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/cycling/cycling_controller_element.rs:136:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/cycling/cycling_list_controller.rs:48:28: error[E0403]: the name `T` is already used for a generic parameter in this item's generic parameters: already used
+src/dev/isxander/yacl3/gui/controllers/cycling/cycling_list_controller.rs:90:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/cycling/enum_controller.rs:57:34: error[E0403]: the name `T` is already used for a generic parameter in this item's generic parameters: already used
+src/dev/isxander/yacl3/gui/controllers/cycling/enum_controller.rs:67:28: error[E0403]: the name `T` is already used for a generic parameter in this item's generic parameters: already used
+src/dev/isxander/yacl3/gui/controllers/cycling/enum_controller.rs:102:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_string_controller.rs:76:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_string_controller_element.rs:118:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_string_controller_element.rs:121:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_string_controller_element.rs:135:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_string_controller_element.rs:138:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_string_controller_element.rs:142:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_widget.rs:236:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_widget.rs:239:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_widget.rs:275:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_widget.rs:278:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_widget.rs:282:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_widget.rs:292:5: error[E0407]: method `is_mouse_over` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/enum_dropdown_controller.rs:64:118: error[E0106]: missing lifetime specifier: expected named lifetime parameter
+src/dev/isxander/yacl3/gui/controllers/dropdown/enum_dropdown_controller.rs:121:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/dropdown/enum_dropdown_controller_element.rs:106:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/enum_dropdown_controller_element.rs:109:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/enum_dropdown_controller_element.rs:123:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/enum_dropdown_controller_element.rs:126:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/enum_dropdown_controller_element.rs:130:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/item_controller.rs:93:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/dropdown/item_controller_element.rs:162:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/item_controller_element.rs:165:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/item_controller_element.rs:221:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/item_controller_element.rs:224:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/dropdown/item_controller_element.rs:228:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/label_controller.rs:43:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/label_controller.rs:229:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/label_controller.rs:232:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/label_controller.rs:236:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/list_entry_widget.rs:233:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/list_entry_widget.rs:236:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/list_entry_widget.rs:240:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/slider/double_slider_controller.rs:100:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/slider/float_slider_controller.rs:100:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/slider/integer_slider_controller.rs:100:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/slider/long_slider_controller.rs:100:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/slider/slider_controller_element.rs:178:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/slider/slider_controller_element.rs:181:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/slider/slider_controller_element.rs:221:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/slider/slider_controller_element.rs:224:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/slider/slider_controller_element.rs:228:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/slider/slider_controller_element.rs:233:5: error[E0407]: method `is_mouse_over` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/string/number/double_field_controller.rs:121:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/string/number/float_field_controller.rs:121:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/string/number/integer_field_controller.rs:121:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/string/number/long_field_controller.rs:121:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/string/string_controller.rs:44:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/string/string_controller_element.rs:695:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/string/string_controller_element.rs:698:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/string/string_controller_element.rs:797:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/string/string_controller_element.rs:800:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/string/string_controller_element.rs:804:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/tick_box_controller.rs:36:5: error[E0407]: method `as_any` is not a member of trait `Controller`: not a member of trait `Controller`
+src/dev/isxander/yacl3/gui/controllers/tick_box_controller.rs:120:5: error[E0407]: method `controller_widget_base` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/tick_box_controller.rs:123:5: error[E0407]: method `controller_widget_base_mut` is not a member of trait `ControllerWidget`: not a member of trait `ControllerWidget`
+src/dev/isxander/yacl3/gui/controllers/tick_box_controller.rs:165:5: error[E0407]: method `abstract_widget_base` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/tick_box_controller.rs:168:5: error[E0407]: method `abstract_widget_base_mut` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/controllers/tick_box_controller.rs:172:5: error[E0407]: method `as_any` is not a member of trait `AbstractWidget`: not a member of trait `AbstractWidget`
+src/dev/isxander/yacl3/gui/image/yacl_image_reload_listener.rs:138:19: error[E0403]: the name `X` is already used for a generic parameter in this item's generic parameters: already used
+src/dev/isxander/yacl3/gui/image/yacl_image_reload_listener.rs:138:31: error[E0403]: the name `T` is already used for a generic parameter in this item's generic parameters: already used
+src/dev/isxander/yacl3/gui/option_list_widget.rs:768:15: error[E0106]: missing lifetime specifier: expected named lifetime parameter
+src/dev/isxander/yacl3/gui/search_field_widget.rs:24:22: error[E0106]: missing lifetime specifier: expected named lifetime parameter
+src/dev/isxander/yacl3/gui/value_formatters.rs:54:5: error[E0407]: method `as_any` is not a member of trait `ValueFormatter`: not a member of trait `ValueFormatter`
+src/mixins/container_event_handler_mixin.rs:14:133: error[E0425]: cannot find type `ContainerEventHandler` in module `mcrust::net::minecraft::client::gui::components::events::container_event_handler`: not found in `mcrust::net::minecraft::client::gui::components::events::container_event_handler`
+src/mixins/container_event_handler_mixin.rs:36:133: error[E0425]: cannot find type `ContainerEventHandler` in module `mcrust::net::minecraft::client::gui::components::events::container_event_handler`: not found in `mcrust::net::minecraft::client::gui::components::events::container_event_handler`
+src/dev/isxander/yacl3/api/controller/item_controller_builder.rs:12:60: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/api/controller/item_controller_builder.rs:15:47: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/api/custom_tab_provider.rs:12:98: error[E0405]: cannot find trait `Tab` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_string_controller.rs:86:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src/dev/isxander/yacl3/gui/controllers/dropdown/enum_dropdown_controller.rs:131:93: error[E0425]: cannot find type `T` in this scope
+src/dev/isxander/yacl3/gui/controllers/dropdown/item_controller.rs:108:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src/dev/isxander/yacl3/gui/controllers/string/number/double_field_controller.rs:126:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src/dev/isxander/yacl3/gui/controllers/string/number/float_field_controller.rs:126:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src/dev/isxander/yacl3/gui/controllers/string/number/integer_field_controller.rs:126:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src/dev/isxander/yacl3/gui/controllers/string/number/long_field_controller.rs:126:93: error[E0425]: cannot find type `T` in this scope: not found in this scope
+src/dev/isxander/yacl3/impl/controller/boolean_controller_builder_impl.rs:26:81: error[E0425]: cannot find value `on_off_formatter` in module `boolean_controller`
+src/dev/isxander/yacl3/impl/controller/boolean_controller_builder_impl.rs:39:55: error[E0425]: cannot find value `on_off_formatter` in module `boolean_controller`
+src/dev/isxander/yacl3/impl/controller/boolean_controller_builder_impl.rs:45:55: error[E0425]: cannot find value `yes_no_formatter` in module `boolean_controller`
+src/dev/isxander/yacl3/impl/controller/boolean_controller_builder_impl.rs:51:55: error[E0425]: cannot find value `true_false_formatter` in module `boolean_controller`
+src/dev/isxander/yacl3/impl/controller/double_field_controller_builder_impl.rs:30:101: error[E0425]: cannot find value `default_formatter` in module `double_slider_controller`
+src/dev/isxander/yacl3/impl/controller/double_slider_controller_builder_impl.rs:30:146: error[E0425]: cannot find value `default_formatter` in module `double_slider_controller`
+src/dev/isxander/yacl3/impl/controller/enum_controller_builder_impl.rs:51:47: error[E0425]: cannot find function `get_default_formatter` in module `enum_controller`: not found in `enum_controller`
+src/dev/isxander/yacl3/impl/controller/enum_dropdown_controller_builder_impl.rs:25:61: error[E0425]: cannot find function `get_default_formatter` in module `enum_controller`: not found in `enum_controller`
+src/dev/isxander/yacl3/impl/controller/float_field_controller_builder_impl.rs:30:100: error[E0425]: cannot find value `default_formatter` in module `float_slider_controller`
+src/dev/isxander/yacl3/impl/controller/float_slider_controller_builder_impl.rs:30:145: error[E0425]: cannot find value `default_formatter` in module `float_slider_controller`
+src/dev/isxander/yacl3/impl/controller/integer_field_controller_builder_impl.rs:30:101: error[E0425]: cannot find value `default_formatter` in module `integer_slider_controller`
+src/dev/isxander/yacl3/impl/controller/integer_slider_controller_builder_impl.rs:30:147: error[E0425]: cannot find value `default_formatter` in module `integer_slider_controller`
+src/dev/isxander/yacl3/impl/controller/item_controller_builder_impl.rs:15:41: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/impl/controller/item_controller_builder_impl.rs:20:48: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/impl/controller/item_controller_builder_impl.rs:25:32: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/impl/controller/item_controller_builder_impl.rs:27:51: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/impl/controller/long_field_controller_builder_impl.rs:30:98: error[E0425]: cannot find value `default_formatter` in module `long_slider_controller`
+src/dev/isxander/yacl3/impl/controller/long_slider_controller_builder_impl.rs:30:144: error[E0425]: cannot find value `default_formatter` in module `long_slider_controller`
+src/dev/isxander/yacl3/api/button_option.rs:15:33: error[E0391]: cycle detected when computing the super predicates of `dev::isxander::yacl3::api::button_option::ButtonOption`
+src/mixins/gui_graphics_extractor_mixin.rs:13:129: error[E0782]: expected a type, found a trait
+src/dev/isxander/yacl3/gui/controllers/action_controller.rs:88:19: error[E0107]: struct takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/action_controller.rs:141:6: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/boolean_controller.rs:162:6: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/color_controller.rs:363:6: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/color_picker_widget.rs:449:6: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/cycling/cycling_controller_element.rs:102:6: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_string_controller_element.rs:117:6: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_widget.rs:235:26: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/dropdown/enum_dropdown_controller_element.rs:105:26: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/dropdown/item_controller_element.rs:161:6: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/slider/slider_controller_element.rs:177:6: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/string/string_controller_element.rs:694:6: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/tick_box_controller.rs:119:6: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/action_controller.rs:150:27: error[E0053]: method `extract_value_text` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/action_controller.rs:82:15: error[E0107]: struct takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/controller_widget.rs:433:5: error[E0119]: conflicting implementations of trait `yacl3::gui::abstract_widget::AbstractWidget` for type `ActionControllerElement`: conflicting implementation for `ActionControllerElement`
+src/dev/isxander/yacl3/gui/controllers/boolean_controller.rs:107:15: error[E0107]: struct takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/boolean_controller.rs:111:19: error[E0107]: struct takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/boolean_controller.rs:171:49: error[E0053]: method `extract_hovered_control` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/boolean_controller.rs:175:27: error[E0053]: method `extract_value_text` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/string/string_controller_element.rs:31:15: error[E0107]: struct takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/color_controller.rs:372:27: error[E0053]: method `extract_value_text` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/controller_popup_widget.rs:17:15: error[E0107]: struct takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/controller_popup_widget.rs:19:42: error[E0107]: trait takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/dropdown/abstract_dropdown_controller.rs:51:59: error[E0107]: missing generics for trait `IStringController`: expected 1 generic argument
+src/dev/isxander/yacl3/gui/controllers/color_picker_widget.rs:458:29: error[E0053]: method `extract_render_state` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/controller_popup_widget.rs:23:19: error[E0107]: struct takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/cycling/cycling_controller_element.rs:27:19: error[E0107]: struct takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/cycling/cycling_controller_element.rs:111:27: error[E0053]: method `extract_value_text` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/cycling/cycling_list_controller.rs:55:54: error[E0107]: missing generics for trait `ICyclingController`: expected 1 generic argument
+src/dev/isxander/yacl3/gui/controllers/cycling/i_cycling_controller.rs:12:51: error[E0107]: missing generics for trait `Controller`: expected 1 generic argument
+src/dev/isxander/yacl3/gui/controllers/dropdown/dropdown_widget.rs:244:29: error[E0053]: method `extract_render_state` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/dropdown/item_controller_element.rs:170:27: error[E0053]: method `extract_value_text` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/slider/i_slider_controller.rs:12:50: error[E0107]: missing generics for trait `Controller`: expected 1 generic argument
+src/dev/isxander/yacl3/gui/controllers/slider/slider_controller_element.rs:41:19: error[E0107]: struct takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/slider/slider_controller_element.rs:186:29: error[E0053]: method `extract_render_state` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/slider/slider_controller_element.rs:192:49: error[E0053]: method `extract_hovered_control` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/slider/slider_controller_element.rs:204:27: error[E0053]: method `extract_value_text` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/string/number/number_field_controller.rs:45:54: error[E0107]: missing generics for trait `ISliderController`: expected 1 generic argument
+src/dev/isxander/yacl3/gui/controllers/string/number/number_field_controller.rs:45:74: error[E0107]: missing generics for trait `IStringController`: expected 1 generic argument
+src/dev/isxander/yacl3/gui/controllers/string/string_controller_element.rs:59:19: error[E0107]: struct takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/string/string_controller_element.rs:703:49: error[E0053]: method `extract_hovered_control` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/string/string_controller_element.rs:707:27: error[E0053]: method `extract_value_text` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/string/string_controller_element.rs:760:20: error[E0053]: method `set_focused` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/controllers/tick_box_controller.rs:66:19: error[E0107]: struct takes 0 generic arguments but 1 generic argument was supplied: expected 0 generic arguments
+src/dev/isxander/yacl3/gui/controllers/tick_box_controller.rs:128:27: error[E0053]: method `extract_value_text` has an incompatible type for trait: types differ in mutability
+src/dev/isxander/yacl3/gui/option_list_widget.rs:61:42: error[E0121]: the placeholder `_` is not allowed within types on item signatures for associated types: not allowed in type signatures
+src/dev/isxander/yacl3/gui/option_list_widget.rs:61:45: error[E0121]: the placeholder `_` is not allowed within types on item signatures for associated types: not allowed in type signatures
+src/dev/isxander/yacl3/gui/option_list_widget.rs:328:25: error[E0121]: the placeholder `_` is not allowed within types on item signatures for implementations: not allowed in type signatures
+src/dev/isxander/yacl3/gui/option_list_widget.rs:328:28: error[E0121]: the placeholder `_` is not allowed within types on item signatures for implementations: not allowed in type signatures
+src/dev/isxander/yacl3/gui/option_list_widget.rs:378:85: error[E0121]: the placeholder `_` is not allowed within types on item signatures for associated types: not allowed in type signatures
+src/dev/isxander/yacl3/gui/option_list_widget.rs:378:88: error[E0121]: the placeholder `_` is not allowed within types on item signatures for associated types: not allowed in type signatures
+src/dev/isxander/yacl3/gui/option_list_widget.rs:402:73: error[E0107]: missing generics for trait `yacl_selection_list::Entry`: expected 1 generic argument
+src/dev/isxander/yacl3/gui/option_list_widget.rs:372:81: error[E0121]: the placeholder `_` is not allowed within types on item signatures for structs: not allowed in type signatures
+src/dev/isxander/yacl3/gui/option_list_widget.rs:372:84: error[E0121]: the placeholder `_` is not allowed within types on item signatures for structs: not allowed in type signatures
+src/dev/isxander/yacl3/gui/option_list_widget.rs:772:29: error[E0121]: the placeholder `_` is not allowed within types on item signatures for structs: not allowed in type signatures
+src/dev/isxander/yacl3/gui/option_list_widget.rs:772:32: error[E0121]: the placeholder `_` is not allowed within types on item signatures for structs: not allowed in type signatures
+src/dev/isxander/yacl3/gui/option_list_widget.rs:862:87: error[E0121]: the placeholder `_` is not allowed within types on item signatures for methods: not allowed in type signatures
+src/dev/isxander/yacl3/gui/option_list_widget.rs:862:90: error[E0121]: the placeholder `_` is not allowed within types on item signatures for methods: not allowed in type signatures
+src/dev/isxander/yacl3/gui/value_formatters.rs:59:29: error[E0053]: method `format` has an incompatible type for trait: expected `f32`, found `&f32`

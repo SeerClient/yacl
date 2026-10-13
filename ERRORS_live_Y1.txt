@@ -1,0 +1,8 @@
+src/dev/isxander/yacl3/config/v2/impl/autogen/item_field_impl.rs:27:45: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/config/v2/impl/autogen/item_field_impl.rs:32:45: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/config/v2/impl/autogen/item_field_impl.rs:34:45: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/config/v2/impl/autogen/item_field_impl.rs:35:39: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/config/v2/impl/autogen/item_field_impl.rs:40:39: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/config/v2/impl/autogen/item_field_impl.rs:46:89: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/config/v2/impl/autogen/item_field_impl.rs:46:175: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`
+src/dev/isxander/yacl3/config/v2/impl/autogen/option_factory_registry.rs:99:40: error[E0425]: cannot find type `JavaRef` in module `compat`: not found in `compat`

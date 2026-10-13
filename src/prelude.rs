@@ -96,36 +96,18 @@ pub use crate::dev::isxander::yacl3::config::v3::config_entry::ConfigEntry as _;
 pub use crate::dev::isxander::yacl3::config::v3::entry_addable::EntryAddable as _;
 pub use crate::dev::isxander::yacl3::config::v3::json_file_codec_config::JsonFileCodecConfig as _;
 pub use crate::dev::isxander::yacl3::config::v3::readonly_config_entry::ReadonlyConfigEntry as _;
-pub use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget as _;
-pub use crate::dev::isxander::yacl3::gui::option_list_widget::Entry as _;
-pub use crate::dev::isxander::yacl3::gui::option_list_widget::GroupSeparatorEntry as _;
-pub use crate::dev::isxander::yacl3::gui::tooltip_button_widget::TooltipButtonWidget as _;
-pub use crate::dev::isxander::yacl3::gui::widget_and_type::WidgetAndType as _;
-pub use crate::dev::isxander::yacl3::gui::yacl_selection_list::YACLSelectionList as _;
-pub use crate::dev::isxander::yacl3::gui::yacl_selection_list::Entry as _;
-pub use crate::dev::isxander::yacl3::gui::controllers::controller_popup_widget::ControllerPopupWidget as _;
-pub use crate::dev::isxander::yacl3::gui::controllers::controller_widget::ControllerWidget as _;
-pub use crate::dev::isxander::yacl3::gui::controllers::cycling::cycling_list_controller::CyclingListController as _;
-pub use crate::dev::isxander::yacl3::gui::controllers::cycling::i_cycling_controller::ICyclingController as _;
-pub use crate::dev::isxander::yacl3::gui::controllers::dropdown::abstract_dropdown_controller::AbstractDropdownController as _;
-pub use crate::dev::isxander::yacl3::gui::controllers::dropdown::abstract_dropdown_controller_element::AbstractDropdownControllerElement as _;
-pub use crate::dev::isxander::yacl3::gui::controllers::slider::i_slider_controller::ISliderController as _;
-pub use crate::dev::isxander::yacl3::gui::controllers::string::i_string_controller::IStringController as _;
-pub use crate::dev::isxander::yacl3::gui::controllers::string::string_controller_element::StringControllerElement as _;
-pub use crate::dev::isxander::yacl3::gui::controllers::string::number::number_field_controller::NumberFieldController as _;
+// The GUI's class traits are not here: `ControllerWidget`, `StringControllerElementClass`, the YACL `AbstractWidget`,
+// `compat::GuiEventListener` and the list entry traits declare methods of the same names (Java's overrides), so a
+// module names the one it calls (PATTERNS_Y2.md P4).
+pub use crate::dev::isxander::yacl3::api::option::AnyOption as _;
+pub use crate::dev::isxander::yacl3::api::list_option::AnyListOption as _;
 pub use crate::dev::isxander::yacl3::gui::image::image_renderer::ImageRenderer as _;
 pub use crate::dev::isxander::yacl3::gui::image::image_renderer_factory::ImageRendererFactory as _;
 pub use crate::dev::isxander::yacl3::gui::image::image_renderer_factory::ImageSupplier as _;
-pub use crate::dev::isxander::yacl3::gui::image::image_renderer_factory::OnThread as _;
-pub use crate::dev::isxander::yacl3::gui::image::r#impl::animated_dynamic_texture_image::AnimFrameProvider as _;
-pub use crate::dev::isxander::yacl3::gui::image::r#impl::dynamic_texture_image::DynamicTextureImage as _;
 pub use crate::dev::isxander::yacl3::gui::render::gui_render_state_sink::GuiRenderStateSink as _;
 pub use crate::dev::isxander::yacl3::gui::render::yacl_gui_element_render_state::YACLGuiElementRenderState as _;
 pub use crate::dev::isxander::yacl3::gui::tab::tab_ext::TabExt as _;
-pub use crate::dev::isxander::yacl3::r#impl::option_impl::OptionImpl as _;
 pub use crate::dev::isxander::yacl3::r#impl::provides_binding_for_deprecation::ProvidesBindingForDeprecation as _;
-pub use crate::dev::isxander::yacl3::r#impl::controller::abstract_controller_builder_impl::AbstractControllerBuilderImpl as _;
-pub use crate::dev::isxander::yacl3::r#impl::controller::string_controller_builder_impl::StringControllerBuilderImpl as _;
 
 pub const MOD_ID: &str = "yet_another_config_lib_v3";
 

@@ -3,7 +3,7 @@
 #[allow(unused_imports)]
 use crate::prelude::*;
 use crate::dev::isxander::yacl3::api::option_description::{Builder, ImageFuture, OptionDescription};
-use crate::dev::isxander::yacl3::debug::debug_properties::DebugProperties;
+use crate::dev::isxander::yacl3::debug::debug_properties;
 use crate::dev::isxander::yacl3::gui::image::image_renderer::ImageRenderer;
 use crate::dev::isxander::yacl3::gui::image::image_renderer_manager::ImageRendererManager;
 use crate::dev::isxander::yacl3::gui::image::r#impl::animated_dynamic_texture_image::AnimatedDynamicTextureImage;
@@ -118,7 +118,7 @@ impl Builder for BuilderImpl {
         self.check_unset();
         let location = unique_location.clone();
         self.image = optional_of(ImageRendererManager::register_or_get_image(&unique_location, move || {
-            DynamicTextureImage::from_path(path, location, DebugProperties::IMAGE_FILTERING)
+            DynamicTextureImage::from_path(path, location, *debug_properties::IMAGE_FILTERING)
         }));
         self.image_unset = false;
         self

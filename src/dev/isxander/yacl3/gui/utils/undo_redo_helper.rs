@@ -25,8 +25,8 @@ impl UndoRedoHelper {
 
     /// java: public void save(String text, int cursorPos, int selectionLength)
     pub fn save(&mut self, text: &str, mut cursor_pos: i32, mut selection_length: i32) {
-        let mut max: i32 = (self.history.len() as i32);
-        (self.history[(self.index) as usize..(max) as usize].to_vec()).clear();
+        // java: history.subList(index, max).clear() - clears the list's own tail
+        self.history.truncate(self.index as usize);
         self.history.push(FieldState::new(text.to_string(), cursor_pos, selection_length));
         self.index += 1;
     }

@@ -1,838 +1,957 @@
-//! Ported from dev.isxander.yacl3.gui.controllers.string.StringControllerElement by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.controllers.string.StringControllerElement.
+//!
+//! `class StringControllerElement extends ControllerWidget<IStringController<?>>`. A subclass (the dropdown elements,
+//! the colour element, a mod's own) holds a `StringControllerElement` and implements `StringControllerElementClass`,
+//! which declares every overridable method of this class AND of `ControllerWidget` with this class's bodies as the
+//! defaults; `ControllerWidget` is then implemented for it (the blanket impl at the bottom), so a base body that calls
+//! `this.unfocus()` / `this.modifyInput(..)` reaches the subclass's override (PATTERNS_Y2.md P3).
+//!
+//! Text positions (`caretPos`, `selectionLength`, `renderOffset`) count chars, as Java's `String` indices do (YACL's
+//! fields hold no surrogate pairs in practice).
 
 #[allow(unused_imports)]
 use crate::prelude::*;
+use crate::dev::isxander::yacl3::api::option::AnyOption;
 use crate::dev::isxander::yacl3::api::option_event_listener::Event;
-use crate::dev::isxander::yacl3::api::utils::dimension;
-use crate::dev::isxander::yacl3::api::utils::dimension::Dimension;
-use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidget;
-use crate::dev::isxander::yacl3::gui::abstract_widget::AbstractWidgetBase;
-use crate::dev::isxander::yacl3::gui::controllers::controller_widget::ControllerWidget;
-use crate::dev::isxander::yacl3::gui::controllers::controller_widget::ControllerWidgetBase;
+use crate::dev::isxander::yacl3::api::utils::dimension::{self, Dimension};
+use crate::dev::isxander::yacl3::gui::controllers::controller_widget::{self, ControllerWidget, ControllerWidgetBase};
 use crate::dev::isxander::yacl3::gui::controllers::string::i_string_controller::IStringController;
 use crate::dev::isxander::yacl3::gui::utils::gui_utils::GuiUtils;
 use crate::dev::isxander::yacl3::gui::utils::undo_redo_helper::UndoRedoHelper;
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
+use compat::{CursorKind, Graphics};
+use mcrust::com::mojang::blaze3d::platform::input_constants;
 use mcrust::net::minecraft::chat_formatting::ChatFormatting;
-use mcrust::net::minecraft::client::gui::gui_graphics_extractor;
-use mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtractor;
+use mcrust::net::minecraft::client::gui::narration::narratable_entry::NarrationPriority;
 use mcrust::net::minecraft::client::gui::narration::narration_element_output::NarrationElementOutput;
 use mcrust::net::minecraft::client::input::character_event::CharacterEvent;
+use mcrust::net::minecraft::client::input::key_event::KeyEvent;
 use mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent;
 use mcrust::net::minecraft::network::chat::component;
-use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
-use crate::dev::isxander::yacl3::api::controller::Controller as _;
-use crate::dev::isxander::yacl3::api::option::Option as _;
 use mcrust::net::minecraft::network::chat::component::Component as _;
+use mcrust::net::minecraft::network::chat::formatted_text::FormattedText;
+use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
+use std::cell::{Cell, RefCell};
 
-/// java: public class StringControllerElement extends ControllerWidget<IStringController<?>>
-pub struct StringControllerElementBase {
-    /// java: extends ControllerWidget
-    pub base: ControllerWidgetBase<compat::Shared<dyn IStringController<compat::Object>>>,
+/// `IStringController<?>` as the element holds it: the controller's members that do not mention `T`.
+#[derive(Clone)]
+pub struct StringControl {
+    get_string: Rc<dyn Fn() -> String>,
+    set_from_string: Rc<dyn Fn(&str)>,
+    is_input_valid: Rc<dyn Fn(&str) -> bool>,
+}
+
+impl StringControl {
+    /// The controller seen through the wildcard.
+    pub fn of<T: Clone + 'static, C: IStringController<T> + ?Sized + 'static>(control: &Arc<C>) -> StringControl {
+        let (a, b, c) = (control.clone(), control.clone(), control.clone());
+        StringControl {
+            get_string: Rc::new(move || a.get_string()),
+            set_from_string: Rc::new(move |value: &str| b.set_from_string(value)),
+            is_input_valid: Rc::new(move |input: &str| c.is_input_valid(input)),
+        }
+    }
+
+    /// java: String getString();
+    pub fn get_string(&self) -> String {
+        (self.get_string)()
+    }
+
+    /// java: void setFromString(String value);
+    pub fn set_from_string(&self, value: &str) {
+        (self.set_from_string)(value)
+    }
+
+    /// java: boolean isInputValid(String input);
+    pub fn is_input_valid(&self, input: &str) -> bool {
+        (self.is_input_valid)(input)
+    }
+}
+
+/// `StringBuilder.insert(index, str)` over char positions.
+pub fn sb_insert(builder: &mut String, index: i32, value: &str) {
+    compat::insert_str(builder, index, value);
+}
+
+/// `StringBuilder.deleteCharAt(index)` over char positions.
+pub fn sb_delete_char_at(builder: &mut String, index: i32) {
+    compat::delete_char_at(builder, index);
+}
+
+/// `StringBuilder.replace(start, end, str)` over char positions.
+pub fn sb_replace(builder: &mut String, start: i32, end: i32, value: &str) {
+    let len = compat::str_len(builder);
+    let end = end.min(len);
+    let head = compat::substring2(builder, 0, start);
+    let tail = compat::substring(builder, end);
+    *builder = format!("{head}{value}{tail}");
+}
+
+fn width(text: &str) -> i32 {
+    compat::font().width(text)
+}
+
+fn width_of(text: &MutableComponent) -> i32 {
+    compat::font().width_of(&FormattedText::from(text.clone()))
+}
+
+/// java: the fields of `StringControllerElement`
+pub struct StringControllerElement {
+    /// java: extends ControllerWidget<IStringController<?>>
+    pub controller_widget: ControllerWidgetBase,
+    /// java: protected final T control;
+    pub control: StringControl,
     /// java: protected final boolean instantApply;
     pub instant_apply: bool,
-    /// java: protected String inputField;
-    pub input_field: String,
+    /// java: protected String inputField; (shared with the option listener that writes it)
+    pub input_field: Rc<RefCell<String>>,
     /// java: protected Dimension<Integer> inputFieldBounds;
-    pub input_field_bounds: Option<compat::Shared<dyn Dimension<i32>>>,
+    pub input_field_bounds: RefCell<Option<Arc<dyn Dimension<i32>>>>,
     /// java: protected boolean inputFieldFocused;
-    pub input_field_focused: bool,
+    pub input_field_focused: Cell<bool>,
     /// java: protected int caretPos;
-    pub caret_pos: i32,
+    pub caret_pos: Cell<i32>,
     /// java: protected int previousCaretPos;
-    pub previous_caret_pos: i32,
+    pub previous_caret_pos: Cell<i32>,
     /// java: protected int selectionLength;
-    pub selection_length: i32,
+    pub selection_length: Cell<i32>,
     /// java: protected int renderOffset;
-    pub render_offset: i32,
+    pub render_offset: Cell<i32>,
     /// java: protected UndoRedoHelper undoRedoHelper;
-    pub undo_redo_helper: Option<UndoRedoHelper>,
+    pub undo_redo_helper: RefCell<Option<UndoRedoHelper>>,
     /// java: protected float ticks;
-    pub ticks: f32,
+    pub ticks: Cell<f32>,
     /// java: protected float caretTicks;
-    pub caret_ticks: f32,
+    pub caret_ticks: Cell<f32>,
     /// java: private final Component emptyText;
-    pub empty_text: MutableComponent,
+    empty_text: MutableComponent,
 }
 
-impl std::ops::Deref for StringControllerElementBase {
-    type Target = ControllerWidgetBase<compat::Shared<dyn IStringController<compat::Object>>>;
-    fn deref(&self) -> &Self::Target {
-        &self.base
-    }
-}
-
-impl std::ops::DerefMut for StringControllerElementBase {
-    fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.base
-    }
-}
-
-impl StringControllerElementBase {
-    /// java: public StringControllerElement(IStringController<?> control, YACLScreen screen, Dimension<Integer> dim, boolean instantApply) (built by the most-derived class's `wrap`, then run on its handle)
-    pub fn new_in<__R>(mut control: compat::Shared<dyn IStringController<compat::Object>>, mut screen: compat::Shared<YACLScreen>, mut dim: compat::Shared<dyn Dimension<i32>>, mut instant_apply: bool, __wrap: impl FnOnce(Self) -> (compat::Shared<dyn StringControllerElement>, __R)) -> (compat::Shared<dyn StringControllerElement>, __R) {
-        let __init_instant_apply = instant_apply;
-        let __init_input_field = control.lock().borrow().get_string();
-        let __init_input_field_focused = false;
-        let __init_selection_length = 0;
-        let __init_empty_text = component::literal("Click to type...").with_style_format(ChatFormatting::Gray);
-        let this = Self {
-            base: ControllerWidgetBase::<compat::Shared<dyn IStringController<compat::Object>>>::new(control.clone(), screen.clone(), dim.clone()),
-            instant_apply: __init_instant_apply,
-            input_field: __init_input_field,
-            input_field_bounds: None,
-            input_field_focused: __init_input_field_focused,
-            caret_pos: 0,
-            previous_caret_pos: 0,
-            selection_length: __init_selection_length,
-            render_offset: 0,
-            undo_redo_helper: None,
-            ticks: 0.0,
-            caret_ticks: 0.0,
-            empty_text: __init_empty_text,
-        };
-        let (__h, __r) = __wrap(this);
-        let __this = __h;
-        let __this_1 = compat::RenderThread::new(__this.clone());
-        { let (__a0,) = (Arc::new(move |opt, event| {
-            if event == Event::StateChange {
-                { let __v = control.lock().borrow().get_string(); compat::write(&(*__this_1.get()), |__t| __t.string_controller_element_base_mut().input_field = __v); }
-            }
-        }),); control.lock().borrow().option().lock().borrow_mut().add_event_listener(__a0) };
-        ({ let __f = compat::dispatch(&__this, |__t| __t.set_dimension()); __f(&compat::view(&__this, |a| a as compat::Shared<dyn AbstractWidget>), dim.clone()) });
-        (__this, __r)
-    }
-
+impl StringControllerElement {
     /// java: public StringControllerElement(IStringController<?> control, YACLScreen screen, Dimension<Integer> dim, boolean instantApply)
-    pub fn new(mut control: compat::Shared<dyn IStringController<compat::Object>>, mut screen: compat::Shared<YACLScreen>, mut dim: compat::Shared<dyn Dimension<i32>>, mut instant_apply: bool) -> compat::Shared<Self> {
-        Self::new_in(control, screen, dim, instant_apply, |this| {
-            let __h = compat::shared(this);
-            ((__h.clone() as compat::Shared<dyn StringControllerElement>), __h)
-        }).1
+    ///
+    /// The constructor's `setDimension(dim)` is this class's body; a subclass whose `setDimension` override must run
+    /// there calls its own after building itself.
+    pub fn new<T: Clone + 'static, C: IStringController<T> + ?Sized + 'static>(
+        control: Arc<C>,
+        screen: &Arc<YACLScreen>,
+        dim: Arc<dyn Dimension<i32>>,
+        instant_apply: bool,
+    ) -> StringControllerElement {
+        let controller_widget = ControllerWidgetBase::new(&control, screen, dim.clone());
+        let string_control = StringControl::of(&control);
+        let input_field = Rc::new(RefCell::new(string_control.get_string()));
+        // java: control.option().addEventListener((opt, event) -> { if (event == STATE_CHANGE) inputField = control.getString(); });
+        let listener_field = Rc::downgrade(&input_field);
+        let listener_control = string_control.clone();
+        controller_widget.option.add_any_event_listener(Arc::new(move |_opt: &dyn AnyOption, event: Event| {
+            if event == Event::StateChange
+                && let Some(field) = listener_field.upgrade()
+            {
+                let value = listener_control.get_string();
+                *field.borrow_mut() = value;
+            }
+        }));
+        let element = StringControllerElement {
+            controller_widget,
+            control: string_control,
+            instant_apply,
+            input_field,
+            input_field_bounds: RefCell::new(None),
+            input_field_focused: Cell::new(false),
+            caret_pos: Cell::new(0),
+            previous_caret_pos: Cell::new(0),
+            selection_length: Cell::new(0),
+            render_offset: Cell::new(0),
+            undo_redo_helper: RefCell::new(None),
+            ticks: Cell::new(0.0),
+            caret_ticks: Cell::new(0.0),
+            empty_text: component::literal("Click to type...").with_style_format(ChatFormatting::Gray),
+        };
+        // java: setDimension(dim);
+        set_dimension(&element, dim);
+        element
     }
 
+    /// `inputField`
+    pub fn input_field(&self) -> String {
+        self.input_field.borrow().clone()
+    }
+
+    /// `inputField = value`
+    pub fn set_input_field(&self, value: String) {
+        *self.input_field.borrow_mut() = value;
+    }
+
+    /// `inputFieldBounds`
+    pub fn input_field_bounds(&self) -> Arc<dyn Dimension<i32>> {
+        self.input_field_bounds.borrow().clone().expect("StringControllerElement.inputFieldBounds before setDimension")
+    }
 }
 
-/// java: the virtual methods of StringControllerElement (implemented by StringControllerElementBase and every subclass)
-pub trait StringControllerElement: ControllerWidget {
-    fn string_controller_element_base(&self) -> &StringControllerElementBase;
-    fn string_controller_element_base_mut(&mut self) -> &mut StringControllerElementBase;
-
-    /// java: private boolean isHoveredInputField(double mouseX, double mouseY) (dispatch: the body for this class)
-    fn is_hovered_input_field(&self) -> fn(&compat::Shared<dyn StringControllerElement>, f64, f64) -> bool {
-        <dyn StringControllerElement>::is_hovered_input_field_body
+impl StringControllerElementClass for StringControllerElement {
+    fn string_element(&self) -> &StringControllerElement {
+        self
     }
-
-    /// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick) (dispatch: the body for this class)
-    fn mouse_clicked(&self) -> fn(&compat::Shared<dyn StringControllerElement>, &MouseButtonEvent, bool) -> bool {
-        <dyn StringControllerElement>::mouse_clicked_body
-    }
-
-    /// java: protected int getDefaultCaretPos() (dispatch: the body for this class)
-    fn get_default_caret_pos(&self) -> fn(&compat::Shared<dyn StringControllerElement>) -> i32 {
-        <dyn StringControllerElement>::get_default_caret_pos_body
-    }
-
-    /// java: @Override public boolean keyPressed(@NonNull KeyEvent event) (dispatch: the body for this class)
-    fn key_pressed(&self) -> fn(&compat::Shared<dyn StringControllerElement>, &mcrust::net::minecraft::client::input::key_event::KeyEvent) -> bool {
-        <dyn StringControllerElement>::key_pressed_body
-    }
-
-    /// java: protected boolean doPaste() (dispatch: the body for this class)
-    fn do_paste(&self) -> fn(&compat::Shared<dyn StringControllerElement>) -> bool {
-        <dyn StringControllerElement>::do_paste_body
-    }
-
-    /// java: protected boolean doCopy() (dispatch: the body for this class)
-    fn do_copy(&self) -> fn(&compat::Shared<dyn StringControllerElement>) -> bool {
-        <dyn StringControllerElement>::do_copy_body
-    }
-
-    /// java: protected boolean doCut() (dispatch: the body for this class)
-    fn do_cut(&self) -> fn(&compat::Shared<dyn StringControllerElement>) -> bool {
-        <dyn StringControllerElement>::do_cut_body
-    }
-
-    /// java: protected boolean doSelectAll() (dispatch: the body for this class)
-    fn do_select_all(&self) -> fn(&compat::Shared<dyn StringControllerElement>) -> bool {
-        <dyn StringControllerElement>::do_select_all_body
-    }
-
-    /// java: protected void checkRenderOffset() (dispatch: the body for this class)
-    fn check_render_offset(&self) -> fn(&compat::Shared<dyn StringControllerElement>) {
-        <dyn StringControllerElement>::check_render_offset_body
-    }
-
-    /// java: @Override public boolean charTyped(@NonNull CharacterEvent event) (dispatch: the body for this class)
-    fn char_typed(&self) -> fn(&compat::Shared<dyn StringControllerElement>, &CharacterEvent) -> bool {
-        <dyn StringControllerElement>::char_typed_body
-    }
-
-    /// java: protected void doBackspace() (dispatch: the body for this class)
-    fn do_backspace(&self) -> fn(&compat::Shared<dyn StringControllerElement>) {
-        <dyn StringControllerElement>::do_backspace_body
-    }
-
-    /// java: protected void doDelete() (dispatch: the body for this class)
-    fn do_delete(&self) -> fn(&compat::Shared<dyn StringControllerElement>) {
-        <dyn StringControllerElement>::do_delete_body
-    }
-
-    /// java: public void write(String string) (dispatch: the body for this class)
-    fn write(&self) -> fn(&compat::Shared<dyn StringControllerElement>, String) {
-        <dyn StringControllerElement>::write_body
-    }
-
-    /// java: public boolean modifyInput(Consumer<StringBuilder> consumer) (dispatch: the body for this class)
-    fn modify_input(&self) -> fn(&compat::Shared<dyn StringControllerElement>, Arc<dyn Fn(String)>) -> bool {
-        <dyn StringControllerElement>::modify_input_body
-    }
-
-    /// java: protected void updateUndoHistory() (dispatch: the body for this class)
-    fn update_undo_history(&self) -> fn(&compat::Shared<dyn StringControllerElement>) {
-        <dyn StringControllerElement>::update_undo_history_body
-    }
-
-    /// java: public int getUnshiftedLength() (dispatch: the body for this class)
-    fn get_unshifted_length(&self) -> fn(&compat::Shared<dyn StringControllerElement>) -> i32 {
-        <dyn StringControllerElement>::get_unshifted_length_body
-    }
-
-    /// java: public int getMaxUnwrapLength() (dispatch: the body for this class)
-    fn get_max_unwrap_length(&self) -> fn(&compat::Shared<dyn StringControllerElement>) -> i32 {
-        <dyn StringControllerElement>::get_max_unwrap_length_body
-    }
-
-    /// java: public int getSelectionStart() (dispatch: the body for this class)
-    fn get_selection_start(&self) -> fn(&compat::Shared<dyn StringControllerElement>) -> i32 {
-        <dyn StringControllerElement>::get_selection_start_body
-    }
-
-    /// java: public int getSelectionEnd() (dispatch: the body for this class)
-    fn get_selection_end(&self) -> fn(&compat::Shared<dyn StringControllerElement>) -> i32 {
-        <dyn StringControllerElement>::get_selection_end_body
-    }
-
-    /// java: protected String getSelection() (dispatch: the body for this class)
-    fn get_selection(&self) -> fn(&compat::Shared<dyn StringControllerElement>) -> String {
-        <dyn StringControllerElement>::get_selection_body
-    }
-
-    /// java: protected int findSpaceIndex(boolean reverse) (dispatch: the body for this class)
-    fn find_space_index(&self) -> fn(&compat::Shared<dyn StringControllerElement>, bool) -> i32 {
-        <dyn StringControllerElement>::find_space_index_body
-    }
-
-    /// java: protected void updateControl() (dispatch: the body for this class)
-    fn update_control(&self) -> fn(&compat::Shared<dyn StringControllerElement>) {
-        <dyn StringControllerElement>::update_control_body
-    }
-
 }
 
-impl dyn StringControllerElement {
-    /// java: @Override protected void extractHoveredControl(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    pub fn extract_hovered_control_body(__this: &compat::Shared<dyn StringControllerElement>, graphics: &mut GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut a: f32) {
+/// java: the overridable methods of `StringControllerElement` and of the `ControllerWidget` / `AbstractWidget` under it,
+/// each defaulting to this class's body.
+pub trait StringControllerElementClass: compat::DynAny {
+    /// The class's fields.
+    fn string_element(&self) -> &StringControllerElement;
+
+    // ---- ControllerWidget's (and AbstractWidget's) members, with this class's bodies ---------------------------
+
+    fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+        controller_widget::extract_render_state(&Base(self), graphics, mouse_x, mouse_y, a)
+    }
+    fn mouse_clicked(&self, event: &MouseButtonEvent, double_click: bool) -> bool {
+        mouse_clicked(self, event, double_click)
+    }
+    fn mouse_released(&self, event: &MouseButtonEvent) -> bool {
+        let _ = event;
+        false
+    }
+    fn mouse_dragged(&self, event: &MouseButtonEvent, dx: f64, dy: f64) -> bool {
+        let _ = (event, dx, dy);
+        false
+    }
+    fn mouse_scrolled(&self, x: f64, y: f64, scroll_x: f64, scroll_y: f64) -> bool {
+        let _ = (x, y, scroll_x, scroll_y);
+        false
+    }
+    fn mouse_moved(&self, x: f64, y: f64) {
+        let _ = (x, y);
+    }
+    fn key_pressed(&self, event: &KeyEvent) -> bool {
+        key_pressed(self, event)
+    }
+    fn char_typed(&self, event: &CharacterEvent) -> bool {
+        char_typed(self, event)
+    }
+    fn is_mouse_over(&self, mouse_x: f64, mouse_y: f64) -> bool {
+        self.string_element().controller_widget.base.is_mouse_over(mouse_x, mouse_y)
+    }
+    fn set_focused(&self, focused: bool) {
+        set_focused(self, focused)
+    }
+    fn is_focused(&self) -> bool {
+        self.string_element().controller_widget.focused.get()
+    }
+    fn should_take_focus_after_interaction(&self) -> bool {
+        true
+    }
+    fn can_reset(&self) -> bool {
+        true
+    }
+    fn set_dimension(&self, dim: Arc<dyn Dimension<i32>>) {
+        set_dimension(self, dim)
+    }
+    fn get_dimension(&self) -> Arc<dyn Dimension<i32>> {
+        self.string_element().controller_widget.base.get_dimension()
+    }
+    fn narration_priority(&self) -> NarrationPriority {
+        controller_widget::narration_priority(&Base(self))
+    }
+    fn unfocus(&self) {
+        unfocus(self)
+    }
+    fn matches_search(&self, query: &str) -> bool {
+        controller_widget::matches_search(&Base(self), query)
+    }
+    fn update_narration(&self, builder: &mut dyn NarrationElementOutput) {
+        controller_widget::update_narration(&Base(self), builder)
+    }
+    fn play_down_sound(&self) {
+        compat::play_down_sound();
+    }
+    fn extract_hovered_control(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+        let _ = (graphics, mouse_x, mouse_y, a);
+    }
+    fn extract_value_text(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+        extract_value_text(self, graphics, mouse_x, mouse_y, a)
+    }
+    fn get_control_width(&self) -> i32 {
+        controller_widget::get_control_width(&Base(self))
+    }
+    fn is_hovered(&self) -> bool {
+        is_hovered(self)
+    }
+    fn get_hovered_control_width(&self) -> i32 {
+        get_hovered_control_width(self)
+    }
+    fn get_unhovered_control_width(&self) -> i32 {
+        get_unhovered_control_width(self)
+    }
+    fn get_x_padding(&self) -> i32 {
+        5
+    }
+    fn get_y_padding(&self) -> i32 {
+        2
+    }
+    fn get_value_text(&self) -> MutableComponent {
+        get_value_text(self)
+    }
+    fn is_available(&self) -> bool {
+        self.string_element().controller_widget.option.available()
+    }
+    fn get_value_color(&self) -> i32 {
+        controller_widget::get_value_color(&Base(self))
+    }
+    fn get_text_y(&self) -> i32 {
+        controller_widget::get_text_y(&Base(self))
     }
 
-    /// java: @Override protected void extractValueText(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    pub fn extract_value_text_body(__this: &compat::Shared<dyn StringControllerElement>, graphics: &mut GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut a: f32) {
-        let mut value_text: MutableComponent = __this.lock().borrow().get_value_text();
-        if !(__this.lock().borrow().is_hovered()) {
-            value_text = (component::literal(&GuiUtils::shorten_string(value_text.get_string(), &compat::read(__this, |__t| __t.string_controller_element_base().text_renderer.clone()).unwrap(), ({ let __f = compat::dispatch(__this, |__t| __t.get_max_unwrap_length()); __f(__this) }), "...".to_string()))).set_style(value_text.get_style().clone());
-        }
-        let mut text_x: i32 = ((((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x_limit()).wrapping_sub({ let (__q0,) = (&mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(value_text.clone()),); __this.lock().borrow().string_controller_element_base().text_renderer.as_ref().unwrap().width_of_cached(__q0) })).wrapping_add(compat::read(__this, |__t| __t.string_controller_element_base().render_offset))).wrapping_sub(__this.lock().borrow().get_x_padding());
-        // TODO(fabric2seer): `GuiGraphicsExtractor.enableScissor` has no Rust method in the port (looked for `enable_scissor` in GuiGraphicsExtractor and its supertypes)
-        // rust: graphics.enable_scissor(&__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().x(), (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().y()).wrapping_sub(2), (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().x_limit()).wrapping_add(1), (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().y_limit()).wrapping_add(4));
-        gui_graphics_extractor::draw_formatted_text_with_drop_shadow(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), &*compat::minecraft(), &mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(value_text.clone()), text_x, __this.lock().borrow().get_text_y(), __this.lock().borrow().get_value_color(), true);
-        if __this.lock().borrow().is_hovered() {
-            { let __v = (compat::read(__this, |__t| __t.string_controller_element_base().ticks) + a); compat::write(__this, |__t| __t.string_controller_element_base_mut().ticks = __v); }
-            let mut text: String = __this.lock().borrow().get_value_text().get_string();
-            graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), __this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().x(), __this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().y_limit(), __this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().x_limit(), (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().y_limit()).wrapping_add(1), -1);
-            graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().x()).wrapping_add(1), (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().y_limit()).wrapping_add(1), (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().x_limit()).wrapping_add(1), (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().y_limit()).wrapping_add(2), 0xFF404040u32 as i32);
-            if compat::read(__this, |__t| __t.string_controller_element_base().input_field_focused) || compat::read(__this, |__t| __t.string_controller_element_base().focused) {
-                if compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) > compat::str_len(&text) {
-                    { let __v = compat::str_len(&text); compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                }
-                let mut caret_x: i32 = text_x.wrapping_add({ let (__q0,) = (&compat::substring2(&text, 0, compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)),); __this.lock().borrow().string_controller_element_base().text_renderer.as_ref().unwrap().width(__q0) });
-                if text.is_empty() {
-                    caret_x = (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().x()).wrapping_add((__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().width()).wrapping_div(2));
-                }
-                if compat::read(__this, |__t| __t.string_controller_element_base().selection_length) != 0 {
-                    let mut selection_x: i32 = text_x.wrapping_add({ let (__q0,) = (&compat::substring2(&text, 0, (compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)).wrapping_add(compat::read(__this, |__t| __t.string_controller_element_base().selection_length))),); __this.lock().borrow().string_controller_element_base().text_renderer.as_ref().unwrap().width(__q0) });
-                    graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), caret_x, (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().y()).wrapping_sub(2), selection_x, (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().y_limit()).wrapping_sub(1), 0x803030FFu32 as i32);
-                }
-                if compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) != compat::read(__this, |__t| __t.string_controller_element_base().previous_caret_pos) {
-                    { let __v = compat::read(__this, |__t| __t.string_controller_element_base().caret_pos); compat::write(__this, |__t| __t.string_controller_element_base_mut().previous_caret_pos = __v); }
-                    { let __v = ((0) as f32) as f32; compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_ticks = __v); }
-                }
-                // TODO(fabric2seer): the condition: an assignment used as a value
-                //   java: (caretTicks += a) % 20 <= 10
-                if todo!("fabric2seer: the condition (TODO above)") {
-                    graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), caret_x, (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().y()).wrapping_sub(2), caret_x.wrapping_add(1), (__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().y_limit()).wrapping_sub(1), -1);
-                }
-            }
-        }
-        graphics.disable_scissor();
-        if { let __f = compat::dispatch(__this, |__t| __t.is_hovered_input_field()); __f(__this, (mouse_x) as f64, (mouse_y) as f64) } {
-            // TODO(fabric2seer): `GuiGraphicsExtractor.requestCursor` has no Rust method in the port (looked for `request_cursor` in GuiGraphicsExtractor and its supertypes)
-            // rust: graphics.request_cursor(&(if __this.lock().borrow().is_available() { IBEAM } else { NOT_ALLOWED }));
-        } else if compat::read(__this, |__t| __t.string_controller_element_base().hovered) {
-            // TODO(fabric2seer): `GuiGraphicsExtractor.requestCursor` has no Rust method in the port (looked for `request_cursor` in GuiGraphicsExtractor and its supertypes)
-            // rust: graphics.request_cursor(&(if __this.lock().borrow().is_available() { POINTING_HAND } else { NOT_ALLOWED }));
-        }
-    }
-
-    /// java: private boolean isHoveredInputField(double mouseX, double mouseY)
-    pub fn is_hovered_input_field_body(__this: &compat::Shared<dyn StringControllerElement>, mut mouse_x: f64, mut mouse_y: f64) -> bool {
-        return { let (__a0, __a1,) = (&((mouse_x) as i32), &((mouse_y) as i32),); __this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().is_point_inside(__a0, __a1) };
-    }
-
-    /// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick)
-    pub fn mouse_clicked_body(__this: &compat::Shared<dyn StringControllerElement>, event: &MouseButtonEvent, mut double_click: bool) -> bool {
-        if __this.lock().borrow().is_available() && { let (__a0, __a1,) = (&((event.x()) as i32), &((event.y()) as i32),); (({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).is_point_inside(__a0, __a1) } {
-            { let __v = true; compat::write(__this, |__t| __t.string_controller_element_base_mut().input_field_focused = __v); }
-            if !({ let __f = compat::dispatch(__this, |__t| __t.is_hovered_input_field()); __f(__this, event.x(), event.y()) }) {
-                { let __v = ({ let __f = compat::dispatch(__this, |__t| __t.get_default_caret_pos()); __f(__this) }); compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-            } else {
-                let mut text_x: i32 = ((event.x()) as i32).wrapping_sub((__this.lock().borrow().string_controller_element_base().input_field_bounds.as_ref().unwrap().x_limit()).wrapping_sub({ let (__q0,) = (&mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(__this.lock().borrow().get_value_text()),); __this.lock().borrow().string_controller_element_base().text_renderer.as_ref().unwrap().width_of_cached(__q0) }));
-                let mut pos: i32 = -1;
-                let mut current_width: i32 = 0;
-                for ch in __this.lock().borrow().string_controller_element_base().input_field.chars().collect::<Vec<char>>() {
-                    pos += 1;
-                    let mut char_length: i32 = { let (__q0,) = (&ch.to_string(),); __this.lock().borrow().string_controller_element_base().text_renderer.as_ref().unwrap().width(__q0) };
-                    if current_width.wrapping_add(char_length.wrapping_div(2)) > text_x {
-                        { let __v = pos; compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                        break;
-                    } else if pos == (compat::str_len(&__this.lock().borrow().string_controller_element_base().input_field)).wrapping_sub(1) {
-                        { let __v = pos.wrapping_add(1); compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                    }
-                    current_width = current_width.wrapping_add(char_length);
-                }
-                { let __v = 0; compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-            }
-            return true;
-        } else {
-            ({ let __f = compat::dispatch(__this, |__t| __t.unfocus()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) });
-        }
-        return false;
-    }
+    // ---- StringControllerElement's own -----------------------------------------------------------------------
 
     /// java: protected int getDefaultCaretPos()
-    pub fn get_default_caret_pos_body(__this: &compat::Shared<dyn StringControllerElement>) -> i32 {
-        return compat::str_len(&__this.lock().borrow().string_controller_element_base().input_field);
+    fn get_default_caret_pos(&self) -> i32 {
+        compat::str_len(&self.string_element().input_field())
     }
-
-    /// java: @Override public boolean keyPressed(@NonNull KeyEvent event)
-    pub fn key_pressed_body(__this: &compat::Shared<dyn StringControllerElement>, event: &mcrust::net::minecraft::client::input::key_event::KeyEvent) -> bool {
-        if !(compat::read(__this, |__t| __t.string_controller_element_base().input_field_focused)) {
-            return false;
-        }
-        match event.key() {
-            256 | mcrust::com::mojang::blaze3d::platform::input_constants::KEY_RETURN => {
-                ({ let __f = compat::dispatch(__this, |__t| __t.unfocus()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) });
-                return true;
-            }
-            263 => {
-                if event.has_shift_down() {
-                    if event.has_control_down() {
-                        let mut space_char: i32 = ({ let __f = compat::dispatch(__this, |__t| __t.find_space_index()); __f(__this, true) });
-                        { let __v = (compat::read(__this, |__t| __t.string_controller_element_base().selection_length)).wrapping_add((compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)).wrapping_sub(space_char)); compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-                        { let __v = space_char; compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                    } else if compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) > 0 {
-                        { let __v = compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) - 1; compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                        { let __v = (compat::read(__this, |__t| __t.string_controller_element_base().selection_length)).wrapping_add(1); compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-                    }
-                    ({ let __f = compat::dispatch(__this, |__t| __t.check_render_offset()); __f(__this) });
-                } else {
-                    if compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) > 0 {
-                        if event.has_control_down() {
-                            { let __v = ({ let __f = compat::dispatch(__this, |__t| __t.find_space_index()); __f(__this, true) }); compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                        } else {
-                            if compat::read(__this, |__t| __t.string_controller_element_base().selection_length) != 0 {
-                                { let __v = (compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)).wrapping_add((compat::read(__this, |__t| __t.string_controller_element_base().selection_length)).min(0)); compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                            } else {
-                                { let __v = compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) - 1; compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                            }
-                        }
-                    }
-                    ({ let __f = compat::dispatch(__this, |__t| __t.check_render_offset()); __f(__this) });
-                    { let __v = 0; compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-                }
-                return true;
-            }
-            262 => {
-                if event.has_shift_down() {
-                    if event.has_control_down() {
-                        let mut space_char: i32 = ({ let __f = compat::dispatch(__this, |__t| __t.find_space_index()); __f(__this, false) });
-                        { let __v = (compat::read(__this, |__t| __t.string_controller_element_base().selection_length)).wrapping_sub(space_char.wrapping_sub(compat::read(__this, |__t| __t.string_controller_element_base().caret_pos))); compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-                        { let __v = space_char; compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                    } else if compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) < compat::str_len(&__this.lock().borrow().string_controller_element_base().input_field) {
-                        { let __v = compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) + 1; compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                        { let __v = (compat::read(__this, |__t| __t.string_controller_element_base().selection_length)).wrapping_sub(1); compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-                    }
-                    ({ let __f = compat::dispatch(__this, |__t| __t.check_render_offset()); __f(__this) });
-                } else {
-                    if compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) < compat::str_len(&__this.lock().borrow().string_controller_element_base().input_field) {
-                        if event.has_control_down() {
-                            { let __v = ({ let __f = compat::dispatch(__this, |__t| __t.find_space_index()); __f(__this, false) }); compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                        } else {
-                            if compat::read(__this, |__t| __t.string_controller_element_base().selection_length) != 0 {
-                                { let __v = (compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)).wrapping_add((compat::read(__this, |__t| __t.string_controller_element_base().selection_length)).max(0)); compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                            } else {
-                                { let __v = compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) + 1; compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                            }
-                        }
-                        ({ let __f = compat::dispatch(__this, |__t| __t.check_render_offset()); __f(__this) });
-                    }
-                    { let __v = 0; compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-                }
-                return true;
-            }
-            259 => {
-                ({ let __f = compat::dispatch(__this, |__t| __t.do_backspace()); __f(__this) });
-                return true;
-            }
-            261 => {
-                ({ let __f = compat::dispatch(__this, |__t| __t.do_delete()); __f(__this) });
-                return true;
-            }
-            269 => {
-                if event.has_shift_down() {
-                    { let __v = (compat::read(__this, |__t| __t.string_controller_element_base().selection_length)).wrapping_sub((compat::str_len(&__this.lock().borrow().string_controller_element_base().input_field)).wrapping_sub(compat::read(__this, |__t| __t.string_controller_element_base().caret_pos))); compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-                } else {
-                    { let __v = 0; compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-                }
-                { let __v = compat::str_len(&__this.lock().borrow().string_controller_element_base().input_field); compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                ({ let __f = compat::dispatch(__this, |__t| __t.check_render_offset()); __f(__this) });
-                return true;
-            }
-            268 => {
-                if event.has_shift_down() {
-                    { let __v = (compat::read(__this, |__t| __t.string_controller_element_base().selection_length)).wrapping_add(compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)); compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-                    { let __v = 0; compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                } else {
-                    { let __v = 0; compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                    { let __v = 0; compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-                }
-                ({ let __f = compat::dispatch(__this, |__t| __t.check_render_offset()); __f(__this) });
-                return true;
-            }
-            _ => {}
-        }
-        if event.is_paste() {
-            return ({ let __f = compat::dispatch(__this, |__t| __t.do_paste()); __f(__this) });
-        } else if event.is_copy() {
-            return ({ let __f = compat::dispatch(__this, |__t| __t.do_copy()); __f(__this) });
-        } else if event.is_cut() {
-            return ({ let __f = compat::dispatch(__this, |__t| __t.do_cut()); __f(__this) });
-        } else if event.is_select_all() {
-            return ({ let __f = compat::dispatch(__this, |__t| __t.do_select_all()); __f(__this) });
-        }
-        return false;
-    }
-
     /// java: protected boolean doPaste()
-    pub fn do_paste_body(__this: &compat::Shared<dyn StringControllerElement>) -> bool {
-        // TODO(fabric2seer): `get_clipboard` takes 1 argument(s) in the port (`clipboard: &mut dyn ClipboardAccess`), Java passes 0
-        // rust: ({ let __f = compat::dispatch(__this, |__t| __t.write()); __f(__this, compat::minecraft().keyboard_handler.get_clipboard()) });
-        ({ let __f = compat::dispatch(__this, |__t| __t.update_undo_history()); __f(__this) });
-        return true;
+    fn do_paste(&self) -> bool {
+        self.write(&compat::get_clipboard());
+        self.update_undo_history();
+        true
     }
-
     /// java: protected boolean doCopy()
-    pub fn do_copy_body(__this: &compat::Shared<dyn StringControllerElement>) -> bool {
-        if compat::read(__this, |__t| __t.string_controller_element_base().selection_length) != 0 {
-            // TODO(fabric2seer): `set_clipboard` takes 2 argument(s) in the port (`clipboard: &mut dyn ClipboardAccess, value: &str`), Java passes 1
-            // rust: compat::minecraft().keyboard_handler.set_clipboard(&mut ({ let __f = compat::dispatch(__this, |__t| __t.get_selection()); __f(__this) }));
+    fn do_copy(&self) -> bool {
+        if self.string_element().selection_length.get() != 0 {
+            compat::set_clipboard(&self.get_selection());
             return true;
         }
-        return false;
+        false
     }
-
     /// java: protected boolean doCut()
-    pub fn do_cut_body(__this: &compat::Shared<dyn StringControllerElement>) -> bool {
-        if compat::read(__this, |__t| __t.string_controller_element_base().selection_length) != 0 {
-            // TODO(fabric2seer): `set_clipboard` takes 2 argument(s) in the port (`clipboard: &mut dyn ClipboardAccess, value: &str`), Java passes 1
-            // rust: compat::minecraft().keyboard_handler.set_clipboard(&mut ({ let __f = compat::dispatch(__this, |__t| __t.get_selection()); __f(__this) }));
-            ({ let __f = compat::dispatch(__this, |__t| __t.write()); __f(__this, "".to_string()) });
-            ({ let __f = compat::dispatch(__this, |__t| __t.update_undo_history()); __f(__this) });
+    fn do_cut(&self) -> bool {
+        if self.string_element().selection_length.get() != 0 {
+            compat::set_clipboard(&self.get_selection());
+            self.write("");
+            self.update_undo_history();
             return true;
         }
+        false
+    }
+    /// java: protected boolean doSelectAll()
+    fn do_select_all(&self) -> bool {
+        let s = self.string_element();
+        s.caret_pos.set(compat::str_len(&s.input_field()));
+        self.check_render_offset();
+        s.selection_length.set(-s.caret_pos.get());
+        true
+    }
+    /// java: protected void checkRenderOffset()
+    fn check_render_offset(&self) {
+        check_render_offset(self)
+    }
+    /// java: protected void doBackspace()
+    fn do_backspace(&self) {
+        let s = self.string_element();
+        if s.selection_length.get() != 0 {
+            self.write("");
+        } else if s.caret_pos.get() > 0 {
+            let at = s.caret_pos.get() - 1;
+            if self.modify_input(&|builder: &mut String| sb_delete_char_at(builder, at)) {
+                s.caret_pos.set(s.caret_pos.get() - 1);
+                self.check_render_offset();
+            }
+        }
+        self.update_undo_history();
+    }
+    /// java: protected void doDelete()
+    fn do_delete(&self) {
+        let s = self.string_element();
+        if s.selection_length.get() != 0 {
+            self.write("");
+        } else if s.caret_pos.get() < compat::str_len(&s.input_field()) {
+            let at = s.caret_pos.get();
+            self.modify_input(&|builder: &mut String| sb_delete_char_at(builder, at));
+        }
+        self.update_undo_history();
+    }
+    /// java: public void write(String string)
+    fn write(&self, string: &str) {
+        write(self, string)
+    }
+    /// java: public boolean modifyInput(Consumer<StringBuilder> consumer)
+    fn modify_input(&self, consumer: &dyn Fn(&mut String)) -> bool {
+        modify_input(self, consumer)
+    }
+    /// java: protected void updateUndoHistory()
+    fn update_undo_history(&self) {
+        // undoRedoHelper.save(inputField, caretPos, selectionLength); - commented out in YACL
+    }
+    /// java: public int getUnshiftedLength()
+    fn get_unshifted_length(&self) -> i32 {
+        let s = self.string_element();
+        let dim = self.get_dimension();
+        if s.controller_widget.option_name_string.is_empty() {
+            return dim.width() - self.get_x_padding() * 2;
+        }
+        dim.width() / 8 * 5
+    }
+    /// java: public int getMaxUnwrapLength()
+    fn get_max_unwrap_length(&self) -> i32 {
+        let s = self.string_element();
+        let dim = self.get_dimension();
+        if s.controller_widget.option_name_string.is_empty() {
+            return dim.width() - self.get_x_padding() * 2;
+        }
+        dim.width() / 2
+    }
+    /// java: public int getSelectionStart()
+    fn get_selection_start(&self) -> i32 {
+        let s = self.string_element();
+        s.caret_pos.get().min(s.caret_pos.get() + s.selection_length.get())
+    }
+    /// java: public int getSelectionEnd()
+    fn get_selection_end(&self) -> i32 {
+        let s = self.string_element();
+        s.caret_pos.get().max(s.caret_pos.get() + s.selection_length.get())
+    }
+    /// java: protected String getSelection()
+    fn get_selection(&self) -> String {
+        compat::substring2(&self.string_element().input_field(), self.get_selection_start(), self.get_selection_end())
+    }
+    /// java: protected int findSpaceIndex(boolean reverse)
+    fn find_space_index(&self, reverse: bool) -> i32 {
+        let s = self.string_element();
+        let input_field = s.input_field();
+        let caret_pos = s.caret_pos.get();
+        let mut from_index = caret_pos;
+        if reverse {
+            if caret_pos > 0 {
+                from_index -= 2;
+            }
+            compat::last_index_of_from(&input_field, " ", from_index) + 1
+        } else {
+            if caret_pos < compat::str_len(&input_field) {
+                from_index += 1;
+            }
+            let mut i = compat::index_of_from(&input_field, " ", from_index) + 1;
+            if i == 0 {
+                i = compat::str_len(&input_field);
+            }
+            i
+        }
+    }
+    /// java: protected void updateControl()
+    fn update_control(&self) {
+        let s = self.string_element();
+        s.control.set_from_string(&s.input_field());
+    }
+}
+
+/// `super.x(..)` from a `StringControllerElement` body into `ControllerWidget`'s: the element seen as a
+/// `ControllerWidget` whose overridable methods are the element class's (so the base body's virtual calls still reach
+/// the most-derived override).
+pub struct Base<'a, W: StringControllerElementClass + ?Sized>(pub &'a W);
+
+impl<W: StringControllerElementClass + ?Sized> ControllerWidget for Base<'_, W> {
+    fn controller_widget(&self) -> &ControllerWidgetBase {
+        &self.0.string_element().controller_widget
+    }
+    fn extract_render_state(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+        StringControllerElementClass::extract_render_state(self.0, graphics, mouse_x, mouse_y, a)
+    }
+    fn is_mouse_over(&self, mouse_x: f64, mouse_y: f64) -> bool {
+        StringControllerElementClass::is_mouse_over(self.0, mouse_x, mouse_y)
+    }
+    fn get_dimension(&self) -> Arc<dyn Dimension<i32>> {
+        StringControllerElementClass::get_dimension(self.0)
+    }
+    fn extract_hovered_control(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+        StringControllerElementClass::extract_hovered_control(self.0, graphics, mouse_x, mouse_y, a)
+    }
+    fn extract_value_text(&self, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+        StringControllerElementClass::extract_value_text(self.0, graphics, mouse_x, mouse_y, a)
+    }
+    fn get_control_width(&self) -> i32 {
+        StringControllerElementClass::get_control_width(self.0)
+    }
+    fn is_hovered(&self) -> bool {
+        StringControllerElementClass::is_hovered(self.0)
+    }
+    fn get_hovered_control_width(&self) -> i32 {
+        StringControllerElementClass::get_hovered_control_width(self.0)
+    }
+    fn get_unhovered_control_width(&self) -> i32 {
+        StringControllerElementClass::get_unhovered_control_width(self.0)
+    }
+    fn get_x_padding(&self) -> i32 {
+        StringControllerElementClass::get_x_padding(self.0)
+    }
+    fn get_y_padding(&self) -> i32 {
+        StringControllerElementClass::get_y_padding(self.0)
+    }
+    fn get_value_text(&self) -> MutableComponent {
+        StringControllerElementClass::get_value_text(self.0)
+    }
+    fn is_available(&self) -> bool {
+        StringControllerElementClass::is_available(self.0)
+    }
+    fn get_value_color(&self) -> i32 {
+        StringControllerElementClass::get_value_color(self.0)
+    }
+    fn get_text_y(&self) -> i32 {
+        StringControllerElementClass::get_text_y(self.0)
+    }
+}
+
+/// java: @Override protected void extractValueText(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
+pub fn extract_value_text<W: StringControllerElementClass + ?Sized>(this: &W, graphics: &Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+    let s = this.string_element();
+    let mut value_text = this.get_value_text();
+    if !this.is_hovered() {
+        let font = compat::font();
+        value_text = component::literal(&GuiUtils::shorten_string(value_text.get_string(), &font, this.get_max_unwrap_length(), "..."))
+            .set_style(value_text.get_style().clone());
+    }
+
+    let dim = this.get_dimension();
+    let bounds = s.input_field_bounds();
+    let text_x = dim.x_limit() - width_of(&value_text) + s.render_offset.get() - this.get_x_padding();
+    graphics.enable_scissor(bounds.x(), bounds.y() - 2, bounds.x_limit() + 1, bounds.y_limit() + 4);
+    graphics.text_component(&value_text, text_x, this.get_text_y(), this.get_value_color(), true);
+
+    if this.is_hovered() {
+        s.ticks.set(s.ticks.get() + a);
+
+        let text = this.get_value_text().get_string();
+
+        graphics.fill(bounds.x(), bounds.y_limit(), bounds.x_limit(), bounds.y_limit() + 1, -1);
+        graphics.fill(bounds.x() + 1, bounds.y_limit() + 1, bounds.x_limit() + 1, bounds.y_limit() + 2, 0xFF404040u32 as i32);
+
+        if s.input_field_focused.get() || s.controller_widget.focused.get() {
+            let text_len = compat::str_len(&text);
+            if s.caret_pos.get() > text_len {
+                s.caret_pos.set(text_len);
+            }
+
+            let mut caret_x = text_x + width(&compat::substring2(&text, 0, s.caret_pos.get()));
+            if text.is_empty() {
+                caret_x = bounds.x() + bounds.width() / 2;
+            }
+
+            if s.selection_length.get() != 0 {
+                let selection_x = text_x + width(&compat::substring2(&text, 0, s.caret_pos.get() + s.selection_length.get()));
+                graphics.fill(caret_x, bounds.y() - 2, selection_x, bounds.y_limit() - 1, 0x803030FFu32 as i32);
+            }
+
+            if s.caret_pos.get() != s.previous_caret_pos.get() {
+                s.previous_caret_pos.set(s.caret_pos.get());
+                s.caret_ticks.set(0.0);
+            }
+
+            s.caret_ticks.set(s.caret_ticks.get() + a);
+            if s.caret_ticks.get() % 20.0 <= 10.0 {
+                graphics.fill(caret_x, bounds.y() - 2, caret_x + 1, bounds.y_limit() - 1, -1);
+            }
+        }
+    }
+    graphics.disable_scissor();
+
+    if is_hovered_input_field(this, mouse_x as f64, mouse_y as f64) {
+        graphics.request_cursor(if this.is_available() { CursorKind::IBeam } else { CursorKind::NotAllowed });
+    } else if s.controller_widget.hovered.get() {
+        graphics.request_cursor(if this.is_available() { CursorKind::PointingHand } else { CursorKind::NotAllowed });
+    }
+}
+
+/// java: private boolean isHoveredInputField(double mouseX, double mouseY)
+pub fn is_hovered_input_field<W: StringControllerElementClass + ?Sized>(this: &W, mouse_x: f64, mouse_y: f64) -> bool {
+    this.string_element().input_field_bounds().is_point_inside(mouse_x as i32, mouse_y as i32)
+}
+
+/// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick)
+pub fn mouse_clicked<W: StringControllerElementClass + ?Sized>(this: &W, event: &MouseButtonEvent, _double_click: bool) -> bool {
+    let s = this.string_element();
+    if this.is_available() && this.get_dimension().is_point_inside(event.x() as i32, event.y() as i32) {
+        s.input_field_focused.set(true);
+
+        if !is_hovered_input_field(this, event.x(), event.y()) {
+            s.caret_pos.set(this.get_default_caret_pos());
+        } else {
+            // gets the appropriate caret position for where you click
+            let text_x = event.x() as i32 - (s.input_field_bounds().x_limit() - width_of(&this.get_value_text()));
+            let input_field = s.input_field();
+            let len = compat::str_len(&input_field);
+            let mut pos: i32 = -1;
+            let mut current_width = 0;
+            for ch in input_field.chars() {
+                pos += 1;
+                let char_length = width(&ch.to_string());
+                if current_width + char_length / 2 > text_x {
+                    // if more than halfway past the characters select in front of that char
+                    s.caret_pos.set(pos);
+                    break;
+                } else if pos == len - 1 {
+                    // if we have reached the end and no matches, it must be the second half of the char so the last position
+                    s.caret_pos.set(pos + 1);
+                }
+                current_width += char_length;
+            }
+
+            s.selection_length.set(0);
+        }
+        return true;
+    } else {
+        this.unfocus();
+    }
+    false
+}
+
+/// java: @Override public boolean keyPressed(@NonNull KeyEvent event)
+pub fn key_pressed<W: StringControllerElementClass + ?Sized>(this: &W, event: &KeyEvent) -> bool {
+    let s = this.string_element();
+    if !s.input_field_focused.get() {
         return false;
     }
 
-    /// java: protected boolean doSelectAll()
-    pub fn do_select_all_body(__this: &compat::Shared<dyn StringControllerElement>) -> bool {
-        { let __v = compat::str_len(&__this.lock().borrow().string_controller_element_base().input_field); compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-        ({ let __f = compat::dispatch(__this, |__t| __t.check_render_offset()); __f(__this) });
-        { let __v = (-compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)); compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-        return true;
-    }
-
-    /// java: protected void checkRenderOffset()
-    pub fn check_render_offset_body(__this: &compat::Shared<dyn StringControllerElement>) {
-        if { let (__q0,) = (&compat::read(__this, |__t| __t.string_controller_element_base().input_field.clone()),); __this.lock().borrow().string_controller_element_base().text_renderer.as_ref().unwrap().width(__q0) } < ({ let __f = compat::dispatch(__this, |__t| __t.get_unshifted_length()); __f(__this) }) {
-            { let __v = 0; compat::write(__this, |__t| __t.string_controller_element_base_mut().render_offset = __v); }
-            return;
+    match event.key() {
+        input_constants::KEY_ESCAPE | input_constants::KEY_RETURN => {
+            this.unfocus();
+            return true;
         }
-        let mut text_x: i32 = (((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x_limit()).wrapping_sub({ let (__q0,) = (&compat::read(__this, |__t| __t.string_controller_element_base().input_field.clone()),); __this.lock().borrow().string_controller_element_base().text_renderer.as_ref().unwrap().width(__q0) })).wrapping_sub(__this.lock().borrow().get_x_padding());
-        let mut caret_x: i32 = text_x.wrapping_add({ let (__q0,) = (&compat::substring2(&__this.lock().borrow().string_controller_element_base().input_field, 0, compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)),); __this.lock().borrow().string_controller_element_base().text_renderer.as_ref().unwrap().width(__q0) });
-        let mut min_x: i32 = (((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).x_limit()).wrapping_sub(__this.lock().borrow().get_x_padding())).wrapping_sub({ let __f = compat::dispatch(__this, |__t| __t.get_unshifted_length()); __f(__this) });
-        let mut max_x: i32 = min_x.wrapping_add({ let __f = compat::dispatch(__this, |__t| __t.get_unshifted_length()); __f(__this) });
-        if caret_x.wrapping_add(compat::read(__this, |__t| __t.string_controller_element_base().render_offset)) < min_x {
-            { let __v = min_x.wrapping_sub(caret_x); compat::write(__this, |__t| __t.string_controller_element_base_mut().render_offset = __v); }
-        } else if caret_x.wrapping_add(compat::read(__this, |__t| __t.string_controller_element_base().render_offset)) > max_x {
-            { let __v = max_x.wrapping_sub(caret_x); compat::write(__this, |__t| __t.string_controller_element_base_mut().render_offset = __v); }
-        }
-    }
-
-    /// java: @Override public boolean charTyped(@NonNull CharacterEvent event)
-    pub fn char_typed_body(__this: &compat::Shared<dyn StringControllerElement>, event: &CharacterEvent) -> bool {
-        if !(compat::read(__this, |__t| __t.string_controller_element_base().input_field_focused)) {
-            return false;
-        }
-        ({ let __f = compat::dispatch(__this, |__t| __t.write()); __f(__this, event.codepoint_as_string()) });
-        ({ let __f = compat::dispatch(__this, |__t| __t.update_undo_history()); __f(__this) });
-        return true;
-    }
-
-    /// java: protected void doBackspace()
-    pub fn do_backspace_body(__this: &compat::Shared<dyn StringControllerElement>) {
-        if compat::read(__this, |__t| __t.string_controller_element_base().selection_length) != 0 {
-            ({ let __f = compat::dispatch(__this, |__t| __t.write()); __f(__this, "".to_string()) });
-        } else if compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) > 0 {
-            let __this_w1 = compat::RenderThread::new(std::sync::Arc::downgrade(__this));
-            if { let __f = compat::dispatch(__this, |__t| __t.modify_input()); __f(__this, Arc::new(move |builder| { let Some(__this_1) = __this_w1.get().upgrade() else { return Default::default(); }; { compat::delete_char_at(&mut builder, (compat::read((&__this_1), |__t| __t.string_controller_element_base().caret_pos)).wrapping_sub(1)); } })) } {
-                { let __v = compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) - 1; compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                ({ let __f = compat::dispatch(__this, |__t| __t.check_render_offset()); __f(__this) });
+        input_constants::KEY_LEFT => {
+            if event.has_shift_down() {
+                if event.has_control_down() {
+                    let space_char = this.find_space_index(true);
+                    s.selection_length.set(s.selection_length.get() + s.caret_pos.get() - space_char);
+                    s.caret_pos.set(space_char);
+                } else if s.caret_pos.get() > 0 {
+                    s.caret_pos.set(s.caret_pos.get() - 1);
+                    s.selection_length.set(s.selection_length.get() + 1);
+                }
+                this.check_render_offset();
+            } else {
+                if s.caret_pos.get() > 0 {
+                    if event.has_control_down() {
+                        s.caret_pos.set(this.find_space_index(true));
+                    } else if s.selection_length.get() != 0 {
+                        s.caret_pos.set(s.caret_pos.get() + s.selection_length.get().min(0));
+                    } else {
+                        s.caret_pos.set(s.caret_pos.get() - 1);
+                    }
+                }
+                this.check_render_offset();
+                s.selection_length.set(0);
             }
+            return true;
         }
-        ({ let __f = compat::dispatch(__this, |__t| __t.update_undo_history()); __f(__this) });
-    }
-
-    /// java: protected void doDelete()
-    pub fn do_delete_body(__this: &compat::Shared<dyn StringControllerElement>) {
-        if compat::read(__this, |__t| __t.string_controller_element_base().selection_length) != 0 {
-            ({ let __f = compat::dispatch(__this, |__t| __t.write()); __f(__this, "".to_string()) });
-        } else if compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) < compat::str_len(&__this.lock().borrow().string_controller_element_base().input_field) {
-            let __this_w1 = compat::RenderThread::new(std::sync::Arc::downgrade(__this));
-            ({ let __f = compat::dispatch(__this, |__t| __t.modify_input()); __f(__this, Arc::new(move |builder| { let Some(__this_1) = __this_w1.get().upgrade() else { return Default::default(); }; { compat::delete_char_at(&mut builder, compat::read((&__this_1), |__t| __t.string_controller_element_base().caret_pos)); } })) });
-        }
-        ({ let __f = compat::dispatch(__this, |__t| __t.update_undo_history()); __f(__this) });
-    }
-
-    /// java: public void write(String string)
-    pub fn write_body(__this: &compat::Shared<dyn StringControllerElement>, mut string: String) {
-        if compat::read(__this, |__t| __t.string_controller_element_base().selection_length) == 0 {
-            let __this_w1 = compat::RenderThread::new(std::sync::Arc::downgrade(__this));
-            if { let __f = compat::dispatch(__this, |__t| __t.modify_input()); __f(__this, Arc::new(move |builder| { let Some(__this_1) = __this_w1.get().upgrade() else { return Default::default(); }; { compat::insert_str(&mut builder, compat::read((&__this_1), |__t| __t.string_controller_element_base().caret_pos), &string.to_string()); } })) } {
-                { let __v = (compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)).wrapping_add(compat::str_len(&string)); compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                ({ let __f = compat::dispatch(__this, |__t| __t.check_render_offset()); __f(__this) });
+        input_constants::KEY_RIGHT => {
+            let len = compat::str_len(&s.input_field());
+            if event.has_shift_down() {
+                if event.has_control_down() {
+                    let space_char = this.find_space_index(false);
+                    s.selection_length.set(s.selection_length.get() - (space_char - s.caret_pos.get()));
+                    s.caret_pos.set(space_char);
+                } else if s.caret_pos.get() < len {
+                    s.caret_pos.set(s.caret_pos.get() + 1);
+                    s.selection_length.set(s.selection_length.get() - 1);
+                }
+                this.check_render_offset();
+            } else {
+                if s.caret_pos.get() < len {
+                    if event.has_control_down() {
+                        s.caret_pos.set(this.find_space_index(false));
+                    } else if s.selection_length.get() != 0 {
+                        s.caret_pos.set(s.caret_pos.get() + s.selection_length.get().max(0));
+                    } else {
+                        s.caret_pos.set(s.caret_pos.get() + 1);
+                    }
+                    this.check_render_offset();
+                }
+                s.selection_length.set(0);
             }
-        } else {
-            let mut start: i32 = ({ let __f = compat::dispatch(__this, |__t| __t.get_selection_start()); __f(__this) });
-            let mut end: i32 = ({ let __f = compat::dispatch(__this, |__t| __t.get_selection_end()); __f(__this) });
-            // TODO(fabric2seer): the condition: StringBuilder.replace
-            //   java: modifyInput(builder -> builder.replace(start, end, string))
-            if todo!("fabric2seer: the condition (TODO above)") {
-                { let __v = start.wrapping_add(compat::str_len(&string)); compat::write(__this, |__t| __t.string_controller_element_base_mut().caret_pos = __v); }
-                { let __v = 0; compat::write(__this, |__t| __t.string_controller_element_base_mut().selection_length = __v); }
-                ({ let __f = compat::dispatch(__this, |__t| __t.check_render_offset()); __f(__this) });
+            return true;
+        }
+        input_constants::KEY_BACKSPACE => {
+            this.do_backspace();
+            return true;
+        }
+        input_constants::KEY_DELETE => {
+            this.do_delete();
+            return true;
+        }
+        input_constants::KEY_END => {
+            let len = compat::str_len(&s.input_field());
+            if event.has_shift_down() {
+                s.selection_length.set(s.selection_length.get() - (len - s.caret_pos.get()));
+            } else {
+                s.selection_length.set(0);
             }
+            s.caret_pos.set(len);
+            this.check_render_offset();
+            return true;
         }
-    }
-
-    /// java: public boolean modifyInput(Consumer<StringBuilder> consumer)
-    pub fn modify_input_body(__this: &compat::Shared<dyn StringControllerElement>, consumer: Arc<dyn Fn(String)>) -> bool {
-        let mut temp: String = compat::read(__this, |__t| __t.string_controller_element_base().input_field.clone());
-        (consumer)(temp.clone());
-        // TODO(fabric2seer): the condition: `.isInputValid(..)` on a T
-        //   java: !control.isInputValid(temp.toString())
-        if todo!("fabric2seer: the condition (TODO above)") {
-            return false;
-        }
-        { let __v = temp.clone(); compat::write(__this, |__t| __t.string_controller_element_base_mut().input_field = __v); }
-        if compat::read(__this, |__t| __t.string_controller_element_base().instant_apply) {
-            ({ let __f = compat::dispatch(__this, |__t| __t.update_control()); __f(__this) });
-        }
-        return true;
-    }
-
-    /// java: protected void updateUndoHistory()
-    pub fn update_undo_history_body(__this: &compat::Shared<dyn StringControllerElement>) {
-    }
-
-    /// java: public int getUnshiftedLength()
-    pub fn get_unshifted_length_body(__this: &compat::Shared<dyn StringControllerElement>) -> i32 {
-        if __this.lock().borrow().string_controller_element_base().option_name_string.is_empty() {
-            return ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).width()).wrapping_sub((__this.lock().borrow().get_x_padding()).wrapping_mul(2));
-        }
-        return (((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).width()).wrapping_div(8)).wrapping_mul(5);
-    }
-
-    /// java: public int getMaxUnwrapLength()
-    pub fn get_max_unwrap_length_body(__this: &compat::Shared<dyn StringControllerElement>) -> i32 {
-        if __this.lock().borrow().string_controller_element_base().option_name_string.is_empty() {
-            return ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).width()).wrapping_sub((__this.lock().borrow().get_x_padding()).wrapping_mul(2));
-        }
-        return ((({ let __f = compat::dispatch(__this, |__t| __t.get_dimension()); __f(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>)) }).lock().borrow()).width()).wrapping_div(2);
-    }
-
-    /// java: public int getSelectionStart()
-    pub fn get_selection_start_body(__this: &compat::Shared<dyn StringControllerElement>) -> i32 {
-        return (compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)).min((compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)).wrapping_add(compat::read(__this, |__t| __t.string_controller_element_base().selection_length)));
-    }
-
-    /// java: public int getSelectionEnd()
-    pub fn get_selection_end_body(__this: &compat::Shared<dyn StringControllerElement>) -> i32 {
-        return (compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)).max((compat::read(__this, |__t| __t.string_controller_element_base().caret_pos)).wrapping_add(compat::read(__this, |__t| __t.string_controller_element_base().selection_length)));
-    }
-
-    /// java: protected String getSelection()
-    pub fn get_selection_body(__this: &compat::Shared<dyn StringControllerElement>) -> String {
-        return compat::substring2(&__this.lock().borrow().string_controller_element_base().input_field, ({ let __f = compat::dispatch(__this, |__t| __t.get_selection_start()); __f(__this) }), ({ let __f = compat::dispatch(__this, |__t| __t.get_selection_end()); __f(__this) }));
-    }
-
-    /// java: protected int findSpaceIndex(boolean reverse)
-    pub fn find_space_index_body(__this: &compat::Shared<dyn StringControllerElement>, mut reverse: bool) -> i32 {
-        let mut i: i32;
-        let mut from_index: i32 = compat::read(__this, |__t| __t.string_controller_element_base().caret_pos);
-        if reverse {
-            if compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) > 0 {
-                from_index = from_index.wrapping_sub(2);
+        input_constants::KEY_HOME => {
+            if event.has_shift_down() {
+                s.selection_length.set(s.selection_length.get() + s.caret_pos.get());
+                s.caret_pos.set(0);
+            } else {
+                s.caret_pos.set(0);
+                s.selection_length.set(0);
             }
-            i = (compat::last_index_of_from(&__this.lock().borrow().string_controller_element_base().input_field, " ", from_index)).wrapping_add(1);
-        } else {
-            if compat::read(__this, |__t| __t.string_controller_element_base().caret_pos) < compat::str_len(&__this.lock().borrow().string_controller_element_base().input_field) {
-                from_index = from_index.wrapping_add(1);
-            }
-            i = (compat::index_of_from(&__this.lock().borrow().string_controller_element_base().input_field, " ", from_index)).wrapping_add(1);
-            if i == 0 {
-                i = compat::str_len(&__this.lock().borrow().string_controller_element_base().input_field);
-            }
+            this.check_render_offset();
+            return true;
         }
-        return i;
+        _ => {}
     }
 
-    /// java: @Override public void setFocused(boolean focused)
-    pub fn set_focused_body(__this: &compat::Shared<dyn StringControllerElement>, mut focused: bool) {
-        __this.base.set_focused(focused);
-        { let __v = focused; compat::write(__this, |__t| __t.string_controller_element_base_mut().input_field_focused = __v); }
+    if event.is_paste() {
+        return this.do_paste();
+    } else if event.is_copy() {
+        return this.do_copy();
+    } else if event.is_cut() {
+        return this.do_cut();
+    } else if event.is_select_all() {
+        return this.do_select_all();
     }
 
-    /// java: @Override public void unfocus()
-    pub fn unfocus_body(__this: &compat::Shared<dyn StringControllerElement>) {
-        __this.base.unfocus();
-        { let __v = false; compat::write(__this, |__t| __t.string_controller_element_base_mut().input_field_focused = __v); }
-        { let __v = 0; compat::write(__this, |__t| __t.string_controller_element_base_mut().render_offset = __v); }
-        if !(compat::read(__this, |__t| __t.string_controller_element_base().instant_apply)) {
-            ({ let __f = compat::dispatch(__this, |__t| __t.update_control()); __f(__this) });
-        }
-    }
-
-    /// StringControllerElement.unfocus as the dispatch of AbstractWidget.unfocus for the concrete class `__C`
-    pub fn unfocus_from<__C: StringControllerElement + 'static>(__this: &compat::Shared<dyn AbstractWidget>) {
-        <dyn StringControllerElement>::unfocus_body(&compat::view_as::<__C, _, _>(__this, |a| a as compat::Shared<dyn StringControllerElement>))
-    }
-
-    /// java: @Override public void setDimension(Dimension<Integer> dim)
-    pub fn set_dimension_body(__this: &compat::Shared<dyn StringControllerElement>, mut dim: compat::Shared<dyn Dimension<i32>>) {
-        <dyn AbstractWidget>::set_dimension_body(&compat::view(__this, |a| a as compat::Shared<dyn AbstractWidget>), dim.clone());
-        let mut width: i32 = 6i32.max(({ let (__q0,) = (&mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(__this.lock().borrow().get_value_text()),); __this.lock().borrow().string_controller_element_base().text_renderer.as_ref().unwrap().width_of_cached(__q0) }).min(({ let __f = compat::dispatch(__this, |__t| __t.get_unshifted_length()); __f(__this) })));
-        { let __v = Some((dimension::of_int(((dim.lock().borrow().x_limit()).wrapping_sub(__this.lock().borrow().get_x_padding())).wrapping_sub(width), (dim.lock().borrow().center_y()).wrapping_sub((mcrust::net::minecraft::client::gui::font::LINE_HEIGHT).wrapping_div(2)), width, mcrust::net::minecraft::client::gui::font::LINE_HEIGHT) as compat::Shared<dyn Dimension<compat::Object>>)); compat::write(__this, |__t| __t.string_controller_element_base_mut().input_field_bounds = __v); }
-    }
-
-    /// StringControllerElement.setDimension as the dispatch of AbstractWidget.setDimension for the concrete class `__C`
-    pub fn set_dimension_from<__C: StringControllerElement + 'static>(__this: &compat::Shared<dyn AbstractWidget>, __p0: compat::Shared<dyn Dimension<i32>>) {
-        <dyn StringControllerElement>::set_dimension_body(&compat::view_as::<__C, _, _>(__this, |a| a as compat::Shared<dyn StringControllerElement>), __p0)
-    }
-
-    /// java: @Override public boolean isHovered()
-    pub fn is_hovered_body(__this: &compat::Shared<dyn StringControllerElement>) -> bool {
-        return (__this.base.is_hovered() || compat::read(__this, |__t| __t.string_controller_element_base().input_field_focused));
-    }
-
-    /// java: protected void updateControl()
-    pub fn update_control_body(__this: &compat::Shared<dyn StringControllerElement>) {
-        // TODO(fabric2seer): `.setFromString(..)` on a T
-        //   java: control.setFromString(inputField);
-    }
-
-    /// java: @Override protected int getUnhoveredControlWidth()
-    pub fn get_unhovered_control_width_body(__this: &compat::Shared<dyn StringControllerElement>) -> i32 {
-        return (if !(__this.lock().borrow().is_hovered()) { (__this.lock().borrow().get_hovered_control_width()).min(({ let __f = compat::dispatch(__this, |__t| __t.get_max_unwrap_length()); __f(__this) })) } else { __this.lock().borrow().get_hovered_control_width() });
-    }
-
-    /// java: @Override protected int getHoveredControlWidth()
-    pub fn get_hovered_control_width_body(__this: &compat::Shared<dyn StringControllerElement>) -> i32 {
-        return ({ let (__q0,) = (&mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(__this.lock().borrow().get_value_text()),); __this.lock().borrow().string_controller_element_base().text_renderer.as_ref().unwrap().width_of_cached(__q0) }).min(({ let __f = compat::dispatch(__this, |__t| __t.get_unshifted_length()); __f(__this) }));
-    }
-
-    /// java: @Override protected Component getValueText()
-    pub fn get_value_text_body(__this: &compat::Shared<dyn StringControllerElement>) -> MutableComponent {
-        if !(compat::read(__this, |__t| __t.string_controller_element_base().input_field_focused)) && __this.lock().borrow().string_controller_element_base().input_field.is_empty() {
-            return compat::read(__this, |__t| __t.string_controller_element_base().empty_text.clone());
-        }
-        // TODO(fabric2seer): `.formatValue(..)` on a T
-        //   java: return instantApply || !inputFieldFocused ? control.formatValue() : Component.literal(inputField);
-        todo!("fabric2seer: the value of this function is in a TODO above")
-    }
-
+    false
 }
 
-impl StringControllerElement for StringControllerElementBase {
-    fn string_controller_element_base(&self) -> &StringControllerElementBase {
-        self
-    }
-    fn string_controller_element_base_mut(&mut self) -> &mut StringControllerElementBase {
-        self
+/// java: protected void checkRenderOffset()
+pub fn check_render_offset<W: StringControllerElementClass + ?Sized>(this: &W) {
+    let s = this.string_element();
+    let input_field = s.input_field();
+    if width(&input_field) < this.get_unshifted_length() {
+        s.render_offset.set(0);
+        return;
     }
 
+    let dim = this.get_dimension();
+    let text_x = dim.x_limit() - width(&input_field) - this.get_x_padding();
+    let caret_x = text_x + width(&compat::substring2(&input_field, 0, s.caret_pos.get()));
+
+    let min_x = dim.x_limit() - this.get_x_padding() - this.get_unshifted_length();
+    let max_x = min_x + this.get_unshifted_length();
+
+    if caret_x + s.render_offset.get() < min_x {
+        s.render_offset.set(min_x - caret_x);
+    } else if caret_x + s.render_offset.get() > max_x {
+        s.render_offset.set(max_x - caret_x);
+    }
 }
 
-impl ControllerWidget<compat::Shared<dyn crate::dev::isxander::yacl3::gui::controllers::string::i_string_controller::IStringController<compat::Object>>> for StringControllerElementBase {
-    fn controller_widget_base(&self) -> &ControllerWidgetBase<compat::Shared<dyn crate::dev::isxander::yacl3::gui::controllers::string::i_string_controller::IStringController<compat::Object>>> {
-        &self.base
+/// java: @Override public boolean charTyped(@NonNull CharacterEvent event)
+pub fn char_typed<W: StringControllerElementClass + ?Sized>(this: &W, event: &CharacterEvent) -> bool {
+    if !this.string_element().input_field_focused.get() {
+        return false;
     }
-    fn controller_widget_base_mut(&mut self) -> &mut ControllerWidgetBase<compat::Shared<dyn crate::dev::isxander::yacl3::gui::controllers::string::i_string_controller::IStringController<compat::Object>>> {
-        &mut self.base
-    }
-
-    /// java: @Override protected void extractHoveredControl(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    fn extract_hovered_control(&self, graphics: &mut GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut a: f32) {
-    }
-
-    /// java: @Override protected void extractValueText(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float a)
-    fn extract_value_text(&mut self, graphics: &mut GuiGraphicsExtractor, mut mouse_x: i32, mut mouse_y: i32, mut a: f32) {
-        let mut value_text: MutableComponent = self.get_value_text();
-        if !self.is_hovered() {
-            // TODO(fabric2seer): `getMaxUnwrapLength(..)` (an overridable method) called where the object has no handle (a `&self` method of a trait: a generic method)
-            //   java: valueText = Component.literal(GuiUtils.shortenString(valueText.getString(), textRenderer, getMaxUnwrapLength(), "...")).setStyle(valueText.getStyle());
-        }
-        // TODO(fabric2seer): `getDimension(..)` (an overridable method) called where the object has no handle (a `&self` method of a trait: a generic method)
-        //   java: int textX = getDimension().xLimit() - textRenderer.width(valueText) + renderOffset - getXPadding();
-        let mut text_x: i32 = todo!("fabric2seer: the initialiser of `textX` (TODO above)");
-        // TODO(fabric2seer): `GuiGraphicsExtractor.enableScissor` has no Rust method in the port (looked for `enable_scissor` in GuiGraphicsExtractor and its supertypes)
-        // rust: graphics.enable_scissor(&self.input_field_bounds.as_ref().unwrap().lock().borrow().x(), (self.input_field_bounds.as_ref().unwrap().lock().borrow().y()).wrapping_sub(2), (self.input_field_bounds.as_ref().unwrap().lock().borrow().x_limit()).wrapping_add(1), (self.input_field_bounds.as_ref().unwrap().lock().borrow().y_limit()).wrapping_add(4));
-        gui_graphics_extractor::draw_formatted_text_with_drop_shadow(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), &*compat::minecraft(), &mcrust::net::minecraft::network::chat::formatted_text::FormattedText::from(value_text.clone()), text_x, self.get_text_y(), self.get_value_color(), true);
-        if self.is_hovered() {
-            self.ticks = (self.ticks + a);
-            let mut text: String = self.get_value_text().get_string();
-            graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), self.input_field_bounds.as_ref().unwrap().lock().borrow().x(), self.input_field_bounds.as_ref().unwrap().lock().borrow().y_limit(), self.input_field_bounds.as_ref().unwrap().lock().borrow().x_limit(), (self.input_field_bounds.as_ref().unwrap().lock().borrow().y_limit()).wrapping_add(1), -1);
-            graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), (self.input_field_bounds.as_ref().unwrap().lock().borrow().x()).wrapping_add(1), (self.input_field_bounds.as_ref().unwrap().lock().borrow().y_limit()).wrapping_add(1), (self.input_field_bounds.as_ref().unwrap().lock().borrow().x_limit()).wrapping_add(1), (self.input_field_bounds.as_ref().unwrap().lock().borrow().y_limit()).wrapping_add(2), 0xFF404040u32 as i32);
-            if self.input_field_focused || self.focused {
-                if self.caret_pos > compat::str_len(&text) {
-                    self.caret_pos = compat::str_len(&text);
-                }
-                let mut caret_x: i32 = text_x.wrapping_add(self.text_renderer.as_ref().unwrap().width(&compat::substring2(&text, 0, self.caret_pos)));
-                if text.is_empty() {
-                    caret_x = (self.input_field_bounds.as_ref().unwrap().lock().borrow().x()).wrapping_add((self.input_field_bounds.as_ref().unwrap().lock().borrow().width()).wrapping_div(2));
-                }
-                if self.selection_length != 0 {
-                    let mut selection_x: i32 = text_x.wrapping_add(self.text_renderer.as_ref().unwrap().width(&compat::substring2(&text, 0, self.caret_pos.wrapping_add(self.selection_length))));
-                    graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), caret_x, (self.input_field_bounds.as_ref().unwrap().lock().borrow().y()).wrapping_sub(2), selection_x, (self.input_field_bounds.as_ref().unwrap().lock().borrow().y_limit()).wrapping_sub(1), 0x803030FFu32 as i32);
-                }
-                if self.caret_pos != self.previous_caret_pos {
-                    self.previous_caret_pos = self.caret_pos;
-                    self.caret_ticks = ((0) as f32) as f32;
-                }
-                // TODO(fabric2seer): the condition: an assignment used as a value
-                //   java: (caretTicks += a) % 20 <= 10
-                if todo!("fabric2seer: the condition (TODO above)") {
-                    graphics.fill(mcrust::com::mojang::blaze3d::opengl::gl_state_manager::gl(), caret_x, (self.input_field_bounds.as_ref().unwrap().lock().borrow().y()).wrapping_sub(2), caret_x.wrapping_add(1), (self.input_field_bounds.as_ref().unwrap().lock().borrow().y_limit()).wrapping_sub(1), -1);
-                }
-            }
-        }
-        graphics.disable_scissor();
-        // TODO(fabric2seer): the condition: `isHoveredInputField(..)` (an overridable method) called where the object has no handle (a `&self` method of a trait: a generic method)
-        //   java: this.isHoveredInputField(..)
-        if todo!("fabric2seer: the condition (TODO above)") {
-            // TODO(fabric2seer): `GuiGraphicsExtractor.requestCursor` has no Rust method in the port (looked for `request_cursor` in GuiGraphicsExtractor and its supertypes)
-            // rust: graphics.request_cursor(&(if self.is_available() { IBEAM } else { NOT_ALLOWED }));
-        } else if self.hovered {
-            // TODO(fabric2seer): `GuiGraphicsExtractor.requestCursor` has no Rust method in the port (looked for `request_cursor` in GuiGraphicsExtractor and its supertypes)
-            // rust: graphics.request_cursor(&(if self.is_available() { POINTING_HAND } else { NOT_ALLOWED }));
-        }
-    }
-
-    /// java: @Override public void setFocused(boolean focused)
-    fn set_focused(&mut self, mut focused: bool) {
-        self.base.set_focused(focused);
-        self.input_field_focused = focused;
-    }
-
-    /// java: @Override public boolean isHovered()
-    fn is_hovered(&self) -> bool {
-        return (self.base.is_hovered() || self.input_field_focused);
-    }
-
-    /// java: @Override protected int getUnhoveredControlWidth()
-    fn get_unhovered_control_width(&self) -> i32 {
-        // TODO(fabric2seer): `getMaxUnwrapLength(..)` (an overridable method) called where the object has no handle (a `&self` method of a trait: a generic method)
-        //   java: return !isHovered() ? Math.min(getHoveredControlWidth(), getMaxUnwrapLength()) : getHoveredControlWidth();
-        todo!("fabric2seer: the value of this function is in a TODO above")
-    }
-
-    /// java: @Override protected int getHoveredControlWidth()
-    fn get_hovered_control_width(&self) -> i32 {
-        // TODO(fabric2seer): `getUnshiftedLength(..)` (an overridable method) called where the object has no handle (a `&self` method of a trait: a generic method)
-        //   java: return Math.min(textRenderer.width(getValueText()), getUnshiftedLength());
-        todo!("fabric2seer: the value of this function is in a TODO above")
-    }
-
-    /// java: @Override protected Component getValueText()
-    fn get_value_text(&self) -> MutableComponent {
-        if !self.input_field_focused && self.input_field.is_empty() {
-            return self.empty_text.clone();
-        }
-        // TODO(fabric2seer): `.formatValue(..)` on a T
-        //   java: return instantApply || !inputFieldFocused ? control.formatValue() : Component.literal(inputField);
-        todo!("fabric2seer: the value of this function is in a TODO above")
-    }
-
+    this.write(&event.codepoint_as_string());
+    this.update_undo_history();
+    true
 }
 
-impl AbstractWidget for StringControllerElementBase {
-    fn abstract_widget_base(&self) -> &AbstractWidgetBase {
-        &self.base.base
+/// java: public void write(String string)
+pub fn write<W: StringControllerElementClass + ?Sized>(this: &W, string: &str) {
+    let s = this.string_element();
+    if s.selection_length.get() == 0 {
+        let at = s.caret_pos.get();
+        if this.modify_input(&|builder: &mut String| sb_insert(builder, at, string)) {
+            s.caret_pos.set(s.caret_pos.get() + compat::str_len(string));
+            this.check_render_offset();
+        }
+    } else {
+        let start = this.get_selection_start();
+        let end = this.get_selection_end();
+        if this.modify_input(&|builder: &mut String| sb_replace(builder, start, end, string)) {
+            s.caret_pos.set(start + compat::str_len(string));
+            s.selection_length.set(0);
+            this.check_render_offset();
+        }
     }
-    fn abstract_widget_base_mut(&mut self) -> &mut AbstractWidgetBase {
-        &mut self.base.base
-    }
+}
 
-    fn as_any(&self) -> &dyn std::any::Any {
-        self
+/// java: public boolean modifyInput(Consumer<StringBuilder> consumer)
+pub fn modify_input<W: StringControllerElementClass + ?Sized>(this: &W, consumer: &dyn Fn(&mut String)) -> bool {
+    let s = this.string_element();
+    let mut temp = s.input_field();
+    consumer(&mut temp);
+    if !s.control.is_input_valid(&temp) {
+        return false;
     }
-
-    /// java: @Override public void unfocus() (dispatch: the body for this class)
-    fn unfocus(&self) -> fn(&compat::Shared<dyn AbstractWidget>) {
-        <dyn StringControllerElement>::unfocus_from::<Self>
+    s.set_input_field(temp);
+    if s.instant_apply {
+        this.update_control();
     }
+    true
+}
 
-    /// java: @Override public void setDimension(Dimension<Integer> dim) (dispatch: the body for this class)
-    fn set_dimension(&self) -> fn(&compat::Shared<dyn AbstractWidget>, compat::Shared<dyn Dimension<i32>>) {
-        <dyn StringControllerElement>::set_dimension_from::<Self>
+/// java: @Override public void setFocused(boolean focused)
+pub fn set_focused<W: StringControllerElementClass + ?Sized>(this: &W, focused: bool) {
+    let s = this.string_element();
+    // super.setFocused(focused);
+    s.controller_widget.focused.set(focused);
+    s.input_field_focused.set(focused);
+}
+
+/// java: @Override public void unfocus()
+pub fn unfocus<W: StringControllerElementClass + ?Sized>(this: &W) {
+    let s = this.string_element();
+    // super.unfocus();
+    s.controller_widget.focused.set(false);
+    s.input_field_focused.set(false);
+    s.render_offset.set(0);
+    if !s.instant_apply {
+        this.update_control();
     }
+}
 
-    /// java: @Override public boolean canReset() (dispatch: the body for this class)
-    fn can_reset(&self) -> fn(&compat::Shared<dyn AbstractWidget>) -> bool {
-        <dyn ControllerWidget>::can_reset_from::<Self>
+/// java: @Override public void setDimension(Dimension<Integer> dim)
+pub fn set_dimension<W: StringControllerElementClass + ?Sized>(this: &W, dim: Arc<dyn Dimension<i32>>) {
+    let s = this.string_element();
+    // super.setDimension(dim);
+    s.controller_widget.base.set_dimension(dim.clone());
+
+    let width = 6.max(width_of(&this.get_value_text()).min(this.get_unshifted_length()));
+    let line_height = mcrust::net::minecraft::client::gui::font::LINE_HEIGHT;
+    let bounds: Arc<dyn Dimension<i32>> =
+        dimension::of_int(dim.x_limit() - this.get_x_padding() - width, dim.center_y() - line_height / 2, width, line_height);
+    *s.input_field_bounds.borrow_mut() = Some(bounds);
+}
+
+/// java: @Override public boolean isHovered()
+pub fn is_hovered<W: StringControllerElementClass + ?Sized>(this: &W) -> bool {
+    controller_widget::is_hovered(&Base(this)) || this.string_element().input_field_focused.get()
+}
+
+/// java: @Override protected int getUnhoveredControlWidth()
+pub fn get_unhovered_control_width<W: StringControllerElementClass + ?Sized>(this: &W) -> i32 {
+    if !this.is_hovered() { this.get_hovered_control_width().min(this.get_max_unwrap_length()) } else { this.get_hovered_control_width() }
+}
+
+/// java: @Override protected int getHoveredControlWidth()
+pub fn get_hovered_control_width<W: StringControllerElementClass + ?Sized>(this: &W) -> i32 {
+    width_of(&this.get_value_text()).min(this.get_unshifted_length())
+}
+
+/// java: @Override protected Component getValueText()
+pub fn get_value_text<W: StringControllerElementClass + ?Sized>(this: &W) -> MutableComponent {
+    let s = this.string_element();
+    let focused = s.input_field_focused.get();
+    if !focused && s.input_field.borrow().is_empty() {
+        return s.empty_text.clone();
     }
+    if s.instant_apply || !focused { s.controller_widget.control_format_value() } else { component::literal(&s.input_field()) }
+}
 
-    /// java: @Override public NarrationPriority narrationPriority() (dispatch: the body for this class)
-    fn narration_priority(&self) -> fn(&compat::Shared<dyn AbstractWidget>) -> crate::unresolved::NarrationPriority {
-        <dyn ControllerWidget>::narration_priority_from::<Self>
+/// Every `StringControllerElementClass` is a `ControllerWidget` (Java's `extends`): the class's methods.
+mod dispatch {
+    use super::StringControllerElementClass;
+    use crate::compat;
+    use crate::dev::isxander::yacl3::api::utils::dimension::Dimension;
+    use crate::dev::isxander::yacl3::gui::controllers::controller_widget::{ControllerWidget, ControllerWidgetBase};
+    use mcrust::net::minecraft::client::gui::narration::narratable_entry::NarrationPriority;
+    use mcrust::net::minecraft::client::gui::narration::narration_element_output::NarrationElementOutput;
+    use mcrust::net::minecraft::client::input::character_event::CharacterEvent;
+    use mcrust::net::minecraft::client::input::key_event::KeyEvent;
+    use mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent;
+    use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
+    use std::sync::Arc;
+
+    impl<W: StringControllerElementClass + ?Sized> ControllerWidget for W {
+        fn controller_widget(&self) -> &ControllerWidgetBase {
+            &StringControllerElementClass::string_element(self).controller_widget
+        }
+        fn extract_render_state(&self, graphics: &compat::Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+            StringControllerElementClass::extract_render_state(self, graphics, mouse_x, mouse_y, a)
+        }
+        fn mouse_clicked(&self, event: &MouseButtonEvent, double_click: bool) -> bool {
+            StringControllerElementClass::mouse_clicked(self, event, double_click)
+        }
+        fn mouse_released(&self, event: &MouseButtonEvent) -> bool {
+            StringControllerElementClass::mouse_released(self, event)
+        }
+        fn mouse_dragged(&self, event: &MouseButtonEvent, dx: f64, dy: f64) -> bool {
+            StringControllerElementClass::mouse_dragged(self, event, dx, dy)
+        }
+        fn mouse_scrolled(&self, x: f64, y: f64, scroll_x: f64, scroll_y: f64) -> bool {
+            StringControllerElementClass::mouse_scrolled(self, x, y, scroll_x, scroll_y)
+        }
+        fn mouse_moved(&self, x: f64, y: f64) {
+            StringControllerElementClass::mouse_moved(self, x, y)
+        }
+        fn key_pressed(&self, event: &KeyEvent) -> bool {
+            StringControllerElementClass::key_pressed(self, event)
+        }
+        fn char_typed(&self, event: &CharacterEvent) -> bool {
+            StringControllerElementClass::char_typed(self, event)
+        }
+        fn is_mouse_over(&self, mouse_x: f64, mouse_y: f64) -> bool {
+            StringControllerElementClass::is_mouse_over(self, mouse_x, mouse_y)
+        }
+        fn set_focused(&self, focused: bool) {
+            StringControllerElementClass::set_focused(self, focused)
+        }
+        fn is_focused(&self) -> bool {
+            StringControllerElementClass::is_focused(self)
+        }
+        fn should_take_focus_after_interaction(&self) -> bool {
+            StringControllerElementClass::should_take_focus_after_interaction(self)
+        }
+        fn can_reset(&self) -> bool {
+            StringControllerElementClass::can_reset(self)
+        }
+        fn set_dimension(&self, dim: Arc<dyn Dimension<i32>>) {
+            StringControllerElementClass::set_dimension(self, dim)
+        }
+        fn get_dimension(&self) -> Arc<dyn Dimension<i32>> {
+            StringControllerElementClass::get_dimension(self)
+        }
+        fn narration_priority(&self) -> NarrationPriority {
+            StringControllerElementClass::narration_priority(self)
+        }
+        fn unfocus(&self) {
+            StringControllerElementClass::unfocus(self)
+        }
+        fn matches_search(&self, query: &str) -> bool {
+            StringControllerElementClass::matches_search(self, query)
+        }
+        fn update_narration(&self, builder: &mut dyn NarrationElementOutput) {
+            StringControllerElementClass::update_narration(self, builder)
+        }
+        fn play_down_sound(&self) {
+            StringControllerElementClass::play_down_sound(self)
+        }
+        fn extract_hovered_control(&self, graphics: &compat::Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+            StringControllerElementClass::extract_hovered_control(self, graphics, mouse_x, mouse_y, a)
+        }
+        fn extract_value_text(&self, graphics: &compat::Graphics<'_>, mouse_x: i32, mouse_y: i32, a: f32) {
+            StringControllerElementClass::extract_value_text(self, graphics, mouse_x, mouse_y, a)
+        }
+        fn get_control_width(&self) -> i32 {
+            StringControllerElementClass::get_control_width(self)
+        }
+        fn is_hovered(&self) -> bool {
+            StringControllerElementClass::is_hovered(self)
+        }
+        fn get_hovered_control_width(&self) -> i32 {
+            StringControllerElementClass::get_hovered_control_width(self)
+        }
+        fn get_unhovered_control_width(&self) -> i32 {
+            StringControllerElementClass::get_unhovered_control_width(self)
+        }
+        fn get_x_padding(&self) -> i32 {
+            StringControllerElementClass::get_x_padding(self)
+        }
+        fn get_y_padding(&self) -> i32 {
+            StringControllerElementClass::get_y_padding(self)
+        }
+        fn get_value_text(&self) -> MutableComponent {
+            StringControllerElementClass::get_value_text(self)
+        }
+        fn is_available(&self) -> bool {
+            StringControllerElementClass::is_available(self)
+        }
+        fn get_value_color(&self) -> i32 {
+            StringControllerElementClass::get_value_color(self)
+        }
+        fn get_text_y(&self) -> i32 {
+            StringControllerElementClass::get_text_y(self)
+        }
     }
-
-    /// java: @Override public boolean matchesSearch(String query) (dispatch: the body for this class)
-    fn matches_search(&self) -> fn(&compat::Shared<dyn AbstractWidget>, &str) -> bool {
-        <dyn ControllerWidget>::matches_search_from::<Self>
-    }
-
-    /// java: @Override public void updateNarration(NarrationElementOutput builder) (dispatch: the body for this class)
-    fn update_narration(&self) -> fn(&compat::Shared<dyn AbstractWidget>, &mut dyn NarrationElementOutput) {
-        <dyn ControllerWidget>::update_narration_from::<Self>
-    }
-
 }

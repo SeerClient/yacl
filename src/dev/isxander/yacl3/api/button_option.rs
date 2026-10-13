@@ -8,8 +8,17 @@ use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
 use crate::dev::isxander::yacl3::r#impl::button_option_impl::BuilderImpl;
 use mcrust::net::minecraft::network::chat::mutable_component::MutableComponent;
 
-/// java: `BiConsumer<YACLScreen, ButtonOption>` - a button's action (the option's value type).
-pub type ButtonAction = Arc<dyn Fn(&Arc<YACLScreen>, &dyn ButtonOption)>;
+/// java: `BiConsumer<YACLScreen, ButtonOption>` - a button's action (the option's value type). A struct, not an alias:
+/// `ButtonOption`'s own supertrait names this type, and an alias spelling `dyn ButtonOption` there is a cycle.
+#[derive(Clone)]
+pub struct ButtonAction(pub Arc<dyn Fn(&Arc<YACLScreen>, &dyn ButtonOption)>);
+
+impl ButtonAction {
+    /// `action.accept(screen, button)`
+    pub fn accept(&self, screen: &Arc<YACLScreen>, button: &dyn ButtonOption) {
+        (self.0)(screen, button)
+    }
+}
 
 /// java: public interface ButtonOption extends Option<BiConsumer<YACLScreen, ButtonOption>>
 pub trait ButtonOption: YOption<ButtonAction> {

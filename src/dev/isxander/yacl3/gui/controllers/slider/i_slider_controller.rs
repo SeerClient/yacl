@@ -1,4 +1,4 @@
-//! Ported from dev.isxander.yacl3.gui.controllers.slider.ISliderController by fabric2seer.
+//! Ported from dev.isxander.yacl3.gui.controllers.slider.ISliderController.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
@@ -9,32 +9,38 @@ use crate::dev::isxander::yacl3::gui::controllers::slider::slider_controller_ele
 use crate::dev::isxander::yacl3::gui::yacl_screen::YACLScreen;
 
 /// java: public interface ISliderController<T extends Number> extends Controller<T>
-pub trait ISliderController<T: Clone + 'static>: Controller {
-    /// java: double min();
+///
+/// Simple custom slider implementation that shifts the current value across when shown. For simplicity,
+/// `SliderControllerElement` works in doubles so each `ISliderController` must cast to double. Its `Controller`
+/// default (`provideWidget`) is the function below; an implementation's `Controller` impl calls it.
+pub trait ISliderController<T: Clone + 'static>: Controller<T> {
+    /// java: double min(); - gets the minimum value for the slider
     fn min(&self) -> f64;
 
-    /// java: double max();
+    /// java: double max(); - gets the maximum value for the slider
     fn max(&self) -> f64;
 
-    /// java: double interval();
+    /// java: double interval(); - gets the interval (or step size) for the slider
     fn interval(&self) -> f64;
 
-    /// java: default double range()
+    /// java: default double range() - gets the range of the slider
     fn range(&self) -> f64 {
-        return (self.max() - self.min());
+        <Self as ISliderController<T>>::max(self) - <Self as ISliderController<T>>::min(self)
     }
 
-    /// java: void setPendingValue(double value);
+    /// java: void setPendingValue(double value); - sets the option's pending value
     fn set_pending_value(&self, value: f64);
 
-    /// java: double pendingValue();
+    /// java: double pendingValue(); - gets the option's pending value
     fn pending_value(&self) -> f64;
+}
 
-    /// java: @Override default AbstractWidget provideWidget(YACLScreen screen, Dimension<Integer> widgetDimension)
-    fn provide_widget(&self, screen: &compat::Shared<YACLScreen>, widget_dimension: &compat::Shared<dyn Dimension<i32>>) -> compat::Shared<dyn AbstractWidget> {
-        // TODO(fabric2seer): `this` handed on as a reference other objects keep: the object has no shared handle to itself (port by hand)
-        //   java: return new SliderControllerElement(this, screen, widgetDimension, min(), max(), interval());
-        todo!("fabric2seer: the value of this function is in a TODO above")
-    }
-
+/// java: @Override default AbstractWidget provideWidget(YACLScreen screen, Dimension<Integer> widgetDimension)
+pub fn provide_widget<T: Clone + 'static, C: ISliderController<T> + ?Sized + 'static>(
+    this: Arc<C>,
+    screen: &Arc<YACLScreen>,
+    widget_dimension: Arc<dyn Dimension<i32>>,
+) -> Arc<dyn AbstractWidget> {
+    let (min, max, interval) = (<C as ISliderController<T>>::min(&this), <C as ISliderController<T>>::max(&this), this.interval());
+    Arc::new(SliderControllerElement::new(this, screen, widget_dimension, min, max, interval))
 }

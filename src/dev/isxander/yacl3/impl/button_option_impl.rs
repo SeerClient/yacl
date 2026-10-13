@@ -225,13 +225,13 @@ impl Builder for BuilderImpl {
 
     /// java: @Override public Builder action(@NotNull BiConsumer<YACLScreen, ButtonOption> action)
     fn action(mut self, action: impl Fn(&Arc<YACLScreen>, &dyn ButtonOption) + 'static) -> Self {
-        self.action = Some(Arc::new(action));
+        self.action = Some(ButtonAction(Arc::new(action)));
         self
     }
 
     /// java: @Override @Deprecated public Builder action(@NotNull Consumer<YACLScreen> action)
     fn action_consumer(mut self, action: impl Fn(&Arc<YACLScreen>) + 'static) -> Self {
-        self.action = Some(Arc::new(move |screen: &Arc<YACLScreen>, _button: &dyn ButtonOption| action(screen)));
+        self.action = Some(ButtonAction(Arc::new(move |screen: &Arc<YACLScreen>, _button: &dyn ButtonOption| action(screen))));
         self
     }
 

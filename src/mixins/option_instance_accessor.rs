@@ -1,14 +1,17 @@
-//! Ported from the Fabric mixin dev.isxander.yacl3.mixin.OptionInstanceAccessor by fabric2seer.
+//! Ported from the Fabric mixin dev.isxander.yacl3.mixin.OptionInstanceAccessor.
 //! @Mixin(net.minecraft.client.OptionInstance)
+//!
+//! `@Accessor T getInitialValue()` - the port's `OptionInstance` exposes the field (`initial_value()`), which is what
+//! `Binding.minecraft(..)` reads.
 
 #[allow(unused_imports)]
 use crate::prelude::*;
+use mcrust::net::minecraft::client::option_instance::OptionInstance;
 
 /// @Accessor getInitialValue -> net.minecraft.client.OptionInstance.initialValue
-// TODO(fabric2seer): `T` - return `&obj.initial_value` with its Rust type
-// pub fn get_initial_value(obj: &mcrust::net::minecraft::client::option_instance::OptionInstance) -> &T { &obj.initial_value }
-
-/// Mixins apply before the game runs: the `preLaunch` entrypoint calls this.
-pub fn register() {
-    // (nothing to register)
+pub fn get_initial_value<T: Clone + PartialEq + std::fmt::Debug + Send + Sync + 'static>(obj: &OptionInstance<T>) -> &T {
+    obj.initial_value()
 }
+
+/// Mixins apply before the game runs: the `preLaunch` entrypoint calls this. (An accessor registers nothing.)
+pub fn register() {}
