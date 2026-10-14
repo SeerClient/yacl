@@ -1,0 +1,10 @@
+# SeerClient SDK build (MODDING.md section 7, "The Rust ABI and the SDK build").
+# This mod links the game's `mcrust` DYLIB. The wrapper partitions mcrust.dll's
+# exports (PRIMARY + delay-loaded OVERFLOW) when it links mcrust.dll, and adds
+# the overflow import libraries (mcrust_x*.lib, /DELAYLOAD, delayimp.lib) when
+# it links this mod. `-C prefer-dynamic` must match the game's SDK build
+# exactly (it is part of the ABI stamp). `seer build` / `seer pack` set the
+# same two values.
+[target.x86_64-pc-windows-msvc]
+linker = "C:/Users/y64/Desktop/McRust/tools/seer_link.cmd"
+rustflags = ["-C", "prefer-dynamic"]

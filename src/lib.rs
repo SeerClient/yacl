@@ -3,6 +3,11 @@
 #![allow(unused_imports, unused_mut, unused_variables, unused_parens, dead_code, non_snake_case,
          clippy::all)]
 
+// The game crate. Linked as the prebuilt SDK `mcrust.dll` (`-L crate=<sdk>/bin`);
+// an explicit `extern crate` because a command-line `--extern mcrust` breaks
+// resolving it through another mod (dandelion -> yacl).
+extern crate mcrust;
+
 pub mod compat;
 pub mod prelude;
 pub mod mixins;
