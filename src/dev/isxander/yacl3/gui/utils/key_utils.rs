@@ -10,14 +10,12 @@ pub struct KeyUtils;
 impl KeyUtils {
     /// java: public static boolean hasShiftDown()
     pub fn has_shift_down() -> bool {
-        // `Minecraft.getInstance().getWindow()` - the window's handle as the game publishes it
-        let window = mcrust::com::mojang::blaze3d::platform::window::published_handle();
-        input_constants::is_key_down(window, input_constants::KEY_LSHIFT) || input_constants::is_key_down(window, input_constants::KEY_RSHIFT)
+        // 26.3: `InputConstants.isKeyDown(key)` reads SDL's keyboard state - no window argument
+        input_constants::is_key_down(input_constants::KEY_LSHIFT) || input_constants::is_key_down(input_constants::KEY_RSHIFT)
     }
 
     /// java: public static boolean hasControlDown()
     pub fn has_control_down() -> bool {
-        let window = mcrust::com::mojang::blaze3d::platform::window::published_handle();
-        input_constants::is_key_down(window, input_constants::KEY_LCONTROL) || input_constants::is_key_down(window, input_constants::KEY_RCONTROL)
+        input_constants::is_key_down(input_constants::KEY_LCONTROL) || input_constants::is_key_down(input_constants::KEY_RCONTROL)
     }
 }

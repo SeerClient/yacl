@@ -14,6 +14,7 @@ use mcrust::net::minecraft::client::gui::gui_graphics_extractor::GuiGraphicsExtr
 use mcrust::net::minecraft::client::gui::navigation::screen_rectangle::ScreenRectangle;
 use mcrust::net::minecraft::client::gui::render::texture_setup::TextureSetup;
 use mcrust::net::minecraft::client::renderer::state::gui::gui_element_render_state::GuiElementRenderState;
+use std::sync::Arc;
 
 /// java: public interface YACLGuiElementRenderState extends GuiElementRenderState
 pub trait YACLGuiElementRenderState: 'static {
@@ -29,7 +30,7 @@ pub trait YACLGuiElementRenderState: 'static {
     fn build_vertices_2(&self, vertex_consumer: &mut dyn VertexConsumer, z: f32);
 
     /// java: @Override default @NotNull RenderPipeline pipeline()
-    fn pipeline(&self) -> Rc<RenderPipeline> {
+    fn pipeline(&self) -> Arc<RenderPipeline> {
         self.base_state().pipeline()
     }
 
@@ -88,7 +89,7 @@ macro_rules! impl_gui_element_render_state {
                     vertex_consumer,
                 )
             }
-            fn pipeline(&self) -> std::rc::Rc<mcrust::com::mojang::blaze3d::pipeline::render_pipeline::RenderPipeline> {
+            fn pipeline(&self) -> std::sync::Arc<mcrust::com::mojang::blaze3d::pipeline::render_pipeline::RenderPipeline> {
                 <$ty as $crate::dev::isxander::yacl3::gui::render::yacl_gui_element_render_state::YACLGuiElementRenderState>::pipeline(self)
             }
             fn texture_setup(&self) -> &mcrust::net::minecraft::client::gui::render::texture_setup::TextureSetup {

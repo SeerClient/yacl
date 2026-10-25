@@ -108,7 +108,7 @@ impl PopupControllerScreen {
                 && ControllerWidget::should_take_focus_after_interaction(&*self.controller_popup)
             {
                 self.set_focused_popup(true);
-                if event.button() == 0 {
+                if event.button() == 1 {
                     self.dragging.set(true);
                 }
             }
@@ -123,7 +123,7 @@ impl PopupControllerScreen {
 
     /// `ContainerEventHandler.mouseReleased`
     pub fn mouse_released(&self, event: &MouseButtonEvent) -> bool {
-        if event.button() == 0 && self.dragging.get() {
+        if event.button() == 1 && self.dragging.get() {
             self.dragging.set(false);
             if self.focused.get() {
                 return ControllerWidget::mouse_released(&*self.controller_popup, event);
@@ -134,7 +134,7 @@ impl PopupControllerScreen {
 
     /// `ContainerEventHandler.mouseDragged`
     pub fn mouse_dragged(&self, event: &MouseButtonEvent, dx: f64, dy: f64) -> bool {
-        self.focused.get() && self.dragging.get() && event.button() == 0 && ControllerWidget::mouse_dragged(&*self.controller_popup, event, dx, dy)
+        self.focused.get() && self.dragging.get() && event.button() == 1 && ControllerWidget::mouse_dragged(&*self.controller_popup, event, dx, dy)
     }
 
     /// java: @Override public boolean mouseScrolled(double mouseX, double mouseY, double horizontal, double vertical)

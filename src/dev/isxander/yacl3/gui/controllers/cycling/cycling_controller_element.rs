@@ -94,7 +94,7 @@ impl ControllerWidget for CyclingControllerElement {
     /// java: @Override public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick)
     fn mouse_clicked(&self, event: &MouseButtonEvent, _double_click: bool) -> bool {
         if !ControllerWidget::is_mouse_over(self, event.x(), event.y())
-            || (event.button() != 0 && event.button() != 1)
+            || (event.button() != 1 && event.button() != 3)
             || !self.is_available()
         {
             return false;
@@ -102,7 +102,7 @@ impl ControllerWidget for CyclingControllerElement {
 
         ControllerWidget::play_down_sound(self);
         let info = event.button_info();
-        self.cycle_value(if event.button() == 1 || info.has_shift_down() || info.has_control_down() { -1 } else { 1 });
+        self.cycle_value(if event.button() == 3 || info.has_shift_down() || info.has_control_down() { -1 } else { 1 });
 
         true
     }

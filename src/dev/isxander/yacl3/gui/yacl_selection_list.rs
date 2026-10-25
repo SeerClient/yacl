@@ -702,7 +702,7 @@ pub fn mouse_clicked<L: SelectionListClass + ?Sized>(this: &L, event: &MouseButt
         Some(widget) => {
             if widget.mouse_clicked(event, double_click) && widget.should_take_focus_after_interaction() {
                 set_focused_child(this, Some(widget));
-                if event.button() == 0 {
+                if event.button() == 1 {
                     list.set_dragging(true);
                 }
             }
@@ -716,10 +716,10 @@ pub fn mouse_clicked<L: SelectionListClass + ?Sized>(this: &L, event: &MouseButt
 /// `ContainerEventHandler.mouseReleased`
 pub fn mouse_released<L: SelectionListClass + ?Sized>(this: &L, event: &MouseButtonEvent) -> bool {
     let list = this.list();
-    if event.button() == 0 {
+    if event.button() == 1 {
         list.scroll.borrow_mut().on_release();
     }
-    if event.button() == 0 && list.is_dragging() {
+    if event.button() == 1 && list.is_dragging() {
         list.set_dragging(false);
         if let Some(focused) = list.get_focused() {
             return focused.mouse_released(event);
@@ -738,7 +738,7 @@ pub fn mouse_dragged<L: SelectionListClass + ?Sized>(this: &L, event: &MouseButt
         reposition_entries(this);
     }
     match list.get_focused() {
-        Some(focused) if list.is_dragging() && event.button() == 0 => focused.mouse_dragged(event, dx, dy),
+        Some(focused) if list.is_dragging() && event.button() == 1 => focused.mouse_dragged(event, dx, dy),
         _ => false,
     }
 }

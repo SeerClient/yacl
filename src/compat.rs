@@ -66,30 +66,26 @@ pub fn random() -> f64 {
 /// static again.
 pub struct MainThread<T> {
     init: fn() -> T,
-    value: std::cell::UnsafeCell<Option<T>>,
-    owner: std::sync::OnceLock<std::thread::ThreadId>,
+    value: std::sync::OnceLock<SyncCell<T>>,
 }
 
-// SAFETY: every access goes through `check`, which pins the cell to one thread.
+/// The slot inside a `MainThread`: Java statics are shared by every thread, so
+/// the cell is reachable from any of them (a Java data race is a data race here
+/// too; the generated code never holds the `&mut` across statements).
+struct SyncCell<T>(std::cell::UnsafeCell<T>);
+// SAFETY: see `MainThread` - a Java static is visible to every thread.
+unsafe impl<T> Sync for SyncCell<T> {}
+unsafe impl<T> Send for SyncCell<T> {}
+
+// SAFETY: a Java `static` is shared across threads; initialisation is
+// synchronised by the `OnceLock` (Java's class-init lock), later accesses are
+// exactly as racy as the Java field they port.
 unsafe impl<T> Sync for MainThread<T> {}
 unsafe impl<T> Send for MainThread<T> {}
 
 impl<T> MainThread<T> {
     pub const fn new(init: fn() -> T) -> MainThread<T> {
-        MainThread { init, value: std::cell::UnsafeCell::new(None), owner: std::sync::OnceLock::new() }
-    }
-
-    fn check(&self) {
-        let me = std::thread::current().id();
-        let owner = *self.owner.get_or_init(|| me);
-        if owner != me {
-            panic!(
-                "fabric2seer MainThread<{}>: a static first used on {:?} was reached from {:?} - Java only touches it on the render thread",
-                std::any::type_name::<T>(),
-                owner,
-                me
-            );
-        }
+        MainThread { init, value: std::sync::OnceLock::new() }
     }
 
     /// The value (created on first use).
@@ -100,14 +96,9 @@ impl<T> MainThread<T> {
     /// The value, mutably (a Java field write / mutating call).
     #[allow(clippy::mut_from_ref)]
     pub fn get_mut(&self) -> &mut T {
-        self.check();
-        // SAFETY: one thread (checked above); no reference outlives the statement that asked for it in the
-        // generated code.
-        let slot = unsafe { &mut *self.value.get() };
-        if slot.is_none() {
-            *slot = Some((self.init)());
-        }
-        slot.as_mut().unwrap()
+        let cell = self.value.get_or_init(|| SyncCell(std::cell::UnsafeCell::new((self.init)())));
+        // SAFETY: no reference outlives the statement that asked for it in the generated code.
+        unsafe { &mut *cell.0.get() }
     }
 
     /// `with(|v| ..)`: read through a closure.
@@ -979,7 +970,23 @@ pub fn executor(task: Box<dyn FnOnce() + Send>) {
 
 /// `Screen.font` / `Minecraft.font` as Java has it: a `Font` over the game's font set.
 pub fn font() -> mcrust::net::minecraft::client::gui::font::Font<'static> {
-    mcrust::net::minecraft::client::gui::font::Font { set: &minecraft().font }
+    // The game REPLACES its `Arc<FontSet>` on a resource reload, so a `Font`
+    // borrowing the field dangles once the old set is dropped (a static
+    // `Font` taken before the boot reload read freed memory). Keep one leaked
+    // clone per font set, so every `Font` handed out stays valid for ever.
+    use mcrust::net::minecraft::client::gui::font::font_set::FontSet;
+    static KEPT: std::sync::Mutex<Vec<&'static std::sync::Arc<FontSet>>> = std::sync::Mutex::new(Vec::new());
+    let current = &minecraft().font;
+    let mut kept = KEPT.lock().unwrap_or_else(|p| p.into_inner());
+    let set: &'static std::sync::Arc<FontSet> = match kept.iter().find(|k| std::sync::Arc::ptr_eq(k, current)) {
+        Some(k) => k,
+        None => {
+            let k: &'static std::sync::Arc<FontSet> = Box::leak(Box::new(std::sync::Arc::clone(current)));
+            kept.push(k);
+            k
+        }
+    };
+    mcrust::net::minecraft::client::gui::font::Font { set }
 }
 
 /// A Component the port hands back as the `FormattedText` it is (`Component extends FormattedText`):
@@ -3452,7 +3459,7 @@ pub fn play_down_sound() {
 /// `Minecraft.getInstance().keyboardHandler.getClipboard()`.
 pub fn get_clipboard() -> String {
     use mcrust::net::minecraft::client::gui::components::edit_box::ClipboardAccess;
-    match mcrust::net::minecraft::client::minecraft::GlfwClipboard::published() {
+    match mcrust::net::minecraft::client::minecraft::SdlClipboard::published() {
         Some(mut clipboard) => clipboard.get_clipboard(),
         None => String::new(),
     }
@@ -3461,7 +3468,7 @@ pub fn get_clipboard() -> String {
 /// `Minecraft.getInstance().keyboardHandler.setClipboard(value)`.
 pub fn set_clipboard(value: &str) {
     use mcrust::net::minecraft::client::gui::components::edit_box::ClipboardAccess;
-    if let Some(mut clipboard) = mcrust::net::minecraft::client::minecraft::GlfwClipboard::published() {
+    if let Some(mut clipboard) = mcrust::net::minecraft::client::minecraft::SdlClipboard::published() {
         clipboard.set_clipboard(value);
     }
 }
@@ -3972,7 +3979,7 @@ impl ContainerEventHandler {
         };
         if widget.mouse_clicked(event, double_click) && widget.should_take_focus_after_interaction() {
             self.set_focused(Some(widget));
-            if event.button() == 0 {
+            if event.button() == 1 {
                 self.set_dragging(true);
             }
         }
@@ -3993,7 +4000,7 @@ impl ContainerEventHandler {
         };
         if widget.mouse_clicked(event, double_click) && widget.should_take_focus_after_interaction() {
             set_focused(Some(widget));
-            if event.button() == 0 {
+            if event.button() == 1 {
                 self.set_dragging(true);
             }
         }
@@ -4002,7 +4009,7 @@ impl ContainerEventHandler {
 
     /// `ContainerEventHandler.mouseReleased:57-66`
     pub fn mouse_released(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent) -> bool {
-        if event.button() == 0 && self.is_dragging() {
+        if event.button() == 1 && self.is_dragging() {
             self.set_dragging(false);
             if let Some(focused) = self.get_focused() {
                 return focused.mouse_released(event);
@@ -4014,7 +4021,7 @@ impl ContainerEventHandler {
     /// `ContainerEventHandler.mouseDragged:68-71`
     pub fn mouse_dragged(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent, dx: f64, dy: f64) -> bool {
         match self.get_focused() {
-            Some(focused) if self.is_dragging() && event.button() == 0 => focused.mouse_dragged(event, dx, dy),
+            Some(focused) if self.is_dragging() && event.button() == 1 => focused.mouse_dragged(event, dx, dy),
             _ => false,
         }
     }
@@ -4362,7 +4369,7 @@ impl GuiEventListener for Button {
         if !self.fields.is_active() {
             return false;
         }
-        if event.button() == 0 && self.is_mouse_over(event.x(), event.y()) {
+        if event.button() == 1 && self.is_mouse_over(event.x(), event.y()) {
             play_down_sound();
             self.on_press();
             return true;
@@ -4372,12 +4379,12 @@ impl GuiEventListener for Button {
 
     /// `AbstractWidget.mouseReleased:127-135`
     fn mouse_released(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent) -> bool {
-        event.button() == 0
+        event.button() == 1
     }
 
     /// `AbstractWidget.mouseDragged:141-149`
     fn mouse_dragged(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent, _dx: f64, _dy: f64) -> bool {
-        event.button() == 0
+        event.button() == 1
     }
 
     /// `AbstractButton.keyPressed:61-72` - a selection key presses an active button.
@@ -4534,7 +4541,7 @@ impl GuiEventListener for EditBoxWidget {
 
     /// `AbstractWidget.mouseClicked` -> `EditBox.onClick:388-394` (the cursor moves to the press).
     fn mouse_clicked(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent, double_click: bool) -> bool {
-        if !self.is_active() || event.button() != 0 || !self.is_mouse_over(event.x(), event.y()) {
+        if !self.is_active() || event.button() != 1 || !self.is_mouse_over(event.x(), event.y()) {
             return false;
         }
         let font = font();
@@ -4548,7 +4555,7 @@ impl GuiEventListener for EditBoxWidget {
 
     /// `EditBox.onDrag:396-399`
     fn mouse_dragged(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent, _dx: f64, _dy: f64) -> bool {
-        if event.button() != 0 {
+        if event.button() != 1 {
             return false;
         }
         let font = font();
@@ -4560,7 +4567,7 @@ impl GuiEventListener for EditBoxWidget {
     }
 
     fn mouse_released(&self, event: &mcrust::net::minecraft::client::input::mouse_button_event::MouseButtonEvent) -> bool {
-        event.button() == 0
+        event.button() == 1
     }
 
     /// `EditBox.keyPressed:280-345` with the window's clipboard.
@@ -4571,7 +4578,7 @@ impl GuiEventListener for EditBoxWidget {
         let active = self.is_active();
         let handled = self.with_edit_box(|e| {
             let mut memory = mcrust::net::minecraft::client::gui::components::edit_box::MemoryClipboard::default();
-            match mcrust::net::minecraft::client::minecraft::GlfwClipboard::published() {
+            match mcrust::net::minecraft::client::minecraft::SdlClipboard::published() {
                 Some(mut clipboard) => e.key_pressed(&font.splitter(), *event, focused, active, &mut clipboard),
                 None => e.key_pressed(&font.splitter(), *event, focused, active, &mut memory),
             }
@@ -5020,15 +5027,15 @@ pub mod tabs {
         /// `AbstractWidget.mouseClicked` - `playDownSound` is empty for a `TabButton` and `onClick` does nothing; the
         /// bar switches the tab when it takes the focus.
         fn mouse_clicked(&self, event: &MouseButtonEvent, _double_click: bool) -> bool {
-            self.fields.is_active() && event.button() == 0 && self.is_mouse_over(event.x(), event.y())
+            self.fields.is_active() && event.button() == 1 && self.is_mouse_over(event.x(), event.y())
         }
 
         fn mouse_released(&self, event: &MouseButtonEvent) -> bool {
-            event.button() == 0
+            event.button() == 1
         }
 
         fn mouse_dragged(&self, event: &MouseButtonEvent, _dx: f64, _dy: f64) -> bool {
-            event.button() == 0
+            event.button() == 1
         }
 
         fn is_mouse_over(&self, x: f64, y: f64) -> bool {
@@ -5204,7 +5211,7 @@ pub mod tabs {
 
         /// `private int getNextTabIndex(int currentTab, KeyEvent event)`
         fn get_next_tab_index(&self, current_tab: i32, event: &KeyEvent) -> i32 {
-            let digit = event.get_digit();
+            let digit = mcrust::com::mojang::blaze3d::platform::input_constants::Type::Keyboard.get_or_create(event.key).get_numeric_key_value().unwrap_or(-1);
             if digit != -1 {
                 (digit - 1).rem_euclid(10)
             } else if event.is_cycle_focus() && current_tab != -1 {

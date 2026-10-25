@@ -195,7 +195,7 @@ impl ControllerWidget for SliderControllerElement {
 
     /// java: @Override public boolean mouseClicked(@NonNull MouseButtonEvent event, boolean doubleClick)
     fn mouse_clicked(&self, event: &MouseButtonEvent, _double_click: bool) -> bool {
-        if !self.is_available() || event.button() != 0 || !self.is_hovered_slider_bounds(event.x(), event.y()) {
+        if !self.is_available() || event.button() != 1 || !self.is_hovered_slider_bounds(event.x(), event.y()) {
             return false;
         }
 
@@ -207,7 +207,7 @@ impl ControllerWidget for SliderControllerElement {
 
     /// java: @Override public boolean mouseDragged(@NonNull MouseButtonEvent event, double dx, double dy)
     fn mouse_dragged(&self, event: &MouseButtonEvent, _dx: f64, _dy: f64) -> bool {
-        if !self.is_available() || event.button() != 0 || !self.mouse_down.get() {
+        if !self.is_available() || event.button() != 1 || !self.mouse_down.get() {
             return false;
         }
 

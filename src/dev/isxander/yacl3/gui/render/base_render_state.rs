@@ -10,13 +10,14 @@ use mcrust::net::minecraft::client::gui::render::texture_setup::TextureSetup;
 use mcrust::net::minecraft::client::renderer::render_pipelines;
 use mcrust::net::minecraft::resources::identifier::Identifier;
 use mcrust::org::joml::matrix3x2f::Matrix3x2f;
+use std::sync::Arc;
 
 /// java: public record BaseRenderState(RenderPipeline pipeline, TextureSetup textureSetup, Matrix3x2f pose,
 /// @Nullable ScreenRectangle bounds, @Nullable ScreenRectangle scissorArea)
 #[derive(Clone)]
 pub struct BaseRenderState {
     /// java: RenderPipeline pipeline
-    pub pipeline: Rc<RenderPipeline>,
+    pub pipeline: Arc<RenderPipeline>,
     /// java: TextureSetup textureSetup
     pub texture_setup: TextureSetup,
     /// java: Matrix3x2f pose
@@ -30,7 +31,7 @@ pub struct BaseRenderState {
 impl BaseRenderState {
     /// java: the canonical record constructor
     pub fn new(
-        pipeline: Rc<RenderPipeline>,
+        pipeline: Arc<RenderPipeline>,
         texture_setup: TextureSetup,
         pose: Matrix3x2f,
         bounds: Option<ScreenRectangle>,
@@ -40,7 +41,7 @@ impl BaseRenderState {
     }
 
     /// java: the record accessor `pipeline()`
-    pub fn pipeline(&self) -> Rc<RenderPipeline> {
+    pub fn pipeline(&self) -> Arc<RenderPipeline> {
         self.pipeline.clone()
     }
 
